@@ -36,6 +36,9 @@ function get_tilt(idiff, erasesize=3, selectsize=3, debug=false)
         println("max value is $(spectrum[iii])\n")
     end
 
+    # Calculate frequencies
+    freqs = [fftfreq(size(idiff)[d])[iii[d]] for d in eachindex(Tuple(iii))]
+
     # select
 
     bbox = selectsize
@@ -44,7 +47,7 @@ function get_tilt(idiff, erasesize=3, selectsize=3, debug=false)
     )):(iii + CartesianIndex(bbox, bbox))]
 
     delta = angle.(ifft(-bbb)) # add π
-    return delta
+    return delta, freqs
 end  # function get_tilt
 
 export get_tilt
@@ -114,12 +117,22 @@ function get_LS_phase_from_n_psi(images, deltas)
     return angle.(x), x, b
 end
 
-function getfinetilt(idiff)
+"""
+    getfinetilt(idiff, n=[1, -1]) -> tilt, τ, σ
+
+TBW
+"""
+function getfinetilt(idiff, n=[1, 1])
     arrsize = size(idiff)
     res = findfirstharmonic2(idiff .^ 2; visualdebug=false)
-    return that =
-        angle(res[2][end]) .+
-        [2π * (i * res[1][1] + j * res[1][2]) .- π for i in 1:arrsize[1], j in 1:arrsize[2]]
+    τ = res[1]
+    σ = angle(res[2][end]) - π
+    if dotproduct(τ, n) < 0
+        τ .*= -1
+        σ *= -1
+    end
+    tilt = σ .+ [2π * (i * τ[1] + j * τ[2]) for i in 1:arrsize[1], j in 1:arrsize[2]]
+    return tilt, τ, σ
 end
 
 abstract type AbstractAlg end
@@ -133,12 +146,14 @@ RoughTilts() = RoughTilts(2, 2)
 struct FineTilts <: TiltExtractionAlg end
 
 function (alg::RoughTilts)(idiffs)
-    tilts = [get_tilt(id, alg.erasesize, alg.selectsize) for id in idiffs]
+    tiltsandfreqs = [get_tilt(id, alg.erasesize, alg.selectsize) for id in idiffs]
+    tilts = [tf[1] for tf in tiltsandfreqs]
+    freqs = [tf[2] for tf in tiltsandfreqs]
     # get signs of the restored tilts
-    s = sign.([phwrap.(diff(dd; dims=2))[1] for dd in tilts])
+    s = [sign(dotproduct(f, [1, 1])) for f in freqs]
     return tilts .*= s
 end
-(::FineTilts)(idiffs) = [getfinetilt(id) for id in idiffs]
+(::FineTilts)(idiffs) = [getfinetilt(id)[1] for id in idiffs]
 
 # Algorithms for Phase-Shifting Interferometry (PSI)
 abstract type PSIAlg <: AbstractAlg end
@@ -164,13 +179,26 @@ function get_phase_from_igrams_with_tilts(
     # Extract  tilts with tilts method
     tilts = tiltsmethod(idiffs)
     # get signs of the restored tilts
-    # s = sign.([phwrap.(diff(dd; dims=2))[1] for dd in tilts])
-    # tilts .*= s
+    s = sign.([phwrap.(diff(dd; dims=2))[1] for dd in tilts])
+    tilts .*= s
 
     phase = psimethod(igramsF, tilts)
     return phase
 end
 
-export get_phase_from_igrams_with_tilts
+function get_phase_from_igrams_with_tilts(
+    igramsF, dirs::Vector{String}, tiltsmethod::TiltExtractionAlg, psimethod::PSIAlg
+)
+    idiffs = diffirst(igramsF)
+    # Extract  tilts with tilts method
+    tilts = tiltsmethod(idiffs)
+    # get signs of the restored tilts
+    # s = getsign.(tilts, dirs[2:end])
+    # tilts .*= s
+    phase = psimethod(igramsF, tilts)
+    return phase
+end
+
+export get_phase_from_igrams_with_tilts, get_tilt_dirs
 
 end

@@ -149,7 +149,7 @@ function (f::FFT2Zoom)(x)
 end
 
 """
-    findfirstharmonic2(a, zoomlevels = nothing)
+    findfirstharmonic2(a, zoomlevels = nothing) ->last_freqs, amp_hyst, freqs_hyst
 
 Find first harmonic in a 2D array `a` with subpixel precision, using sequential FFT2Zoom with `zoomlevels`
 """
@@ -174,24 +174,30 @@ function findfirstharmonic2(
     freqrange = fftfreq.(arrsize)
 
     if visualdebug
-        dpng(heatmap(
-            fftshift(freqrange[1]),
-            fftshift(freqrange[2]),
-            abs.(fftshift(fft(a)));
-            axis=(aspect=DataAspect(), title="Abs of the Fourier transform of the signal"),
-        ))
+        dpng(
+            heatmap(
+                fftshift(freqrange[1]),
+                fftshift(freqrange[2]),
+                abs.(fftshift(fft(a)));
+                axis=(
+                    aspect=DataAspect(), title="Abs of the Fourier transform of the signal"
+                ),
+            ),
+        )
     end
 
     signal = removeDC(a, erazesize)
     # signal = a
     spectrum = fft(signal)
     if visualdebug
-        dpng(heatmap(
-            fftshift(freqrange[1]),
-            fftshift(freqrange[2]),
-            abs.(fftshift(spectrum));
-            axis=(aspect=DataAspect(), title="DC removed from the signal"),
-        ))
+        dpng(
+            heatmap(
+                fftshift(freqrange[1]),
+                fftshift(freqrange[2]),
+                abs.(fftshift(spectrum));
+                axis=(aspect=DataAspect(), title="DC removed from the signal"),
+            ),
+        )
     end
 
     aaa = FFTView(spectrum)
@@ -234,17 +240,21 @@ function findfirstharmonic2(
         amp = zoomedspectrum[jjj]
         fine_freqs = [Rset[jjj[1]], Sset[jjj[2]]]
         # select the frequncy in the positive half
-        if fine_freqs[1] ≈ 0
-            if sign(fine_freqs[2]) == -1
-                fine_freqs = fine_freqs .* sign(fine_freqs[2])
-                amp = conj(amp)
-            end
-        else
-            if sign(fine_freqs[1]) == -1
-                fine_freqs = fine_freqs .* sign(fine_freqs[1])
-                amp = conj(amp)
-            end
-        end
+        # if fine_freqs[1] ≈ 0
+        #     if sign(fine_freqs[2]) == -1
+        #         fine_freqs = fine_freqs .* sign(fine_freqs[2])
+        #         amp = conj(amp)
+        #     end
+        # else
+        #     if sign(fine_freqs[1]) == -1
+        #         fine_freqs = fine_freqs .* sign(fine_freqs[1])
+        #         amp = conj(amp)
+        #     end
+        # end
+        # if fine_freqs[1] * n[1] + fine_freqs[2] * n[2] < 0
+        #     amp = conj(amp)
+        #     fine_freqs .*= -1
+        # end
 
         if visualdebug
             fig, ax, hm = heatmap(
