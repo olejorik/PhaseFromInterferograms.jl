@@ -2,6 +2,7 @@ module PhaseFromInterferograms
 using FFTW
 using FFTViews
 using PhaseUtils: phwrap, dotproduct
+using StatsBase
 
 # Write your package code here.
 include("utils.jl")
@@ -151,7 +152,8 @@ function (alg::RoughTilts)(idiffs)
     freqs = [tf[2] for tf in tiltsandfreqs]
     # get signs of the restored tilts
     s = [sign(dotproduct(f, [1, 1])) for f in freqs]
-    return tilts .*= s
+    tilts .*= s
+    return tilts
 end
 (::FineTilts)(idiffs) = [getfinetilt(id)[1] for id in idiffs]
 
@@ -169,6 +171,28 @@ struct LSPSI <: PSIAlg end
         fulldeltas = [[zero(deltas[1])]; deltas]
         get_LS_phase_from_n_psi(images, fulldeltas)[1]
     end
+
+function reorder(images, deltas, ref)
+    if length(images) == length(deltas)
+        fulldeltas = deltas
+    else
+        @info "Assuming the first delta is zero"
+        fulldeltas = [[zero(deltas[1])]; deltas]
+        removefirst = true
+    end
+    n = length(images)
+    @assert ref <= n
+    perm = collect(1:n)
+    perm[1] = ref
+    perm[ref] = 1
+    imnew = images[perm]
+    deltasnew = fulldeltas[perm] .- [fulldeltas[ref]]
+    if removefirst
+        return imnew, deltasnew[2:end]
+    else
+        return imnew, deltasnew
+    end
+end
 
 export RoughTilts, FineTilts, diffPSI, LSPSI
 
@@ -193,12 +217,30 @@ function get_phase_from_igrams_with_tilts(
     # Extract  tilts with tilts method
     tilts = tiltsmethod(idiffs)
     # get signs of the restored tilts
-    # s = getsign.(tilts, dirs[2:end])
-    # tilts .*= s
+    s = getsign.(tilts, dirs[2:end])
+    tilts .*= s
     phase = psimethod(igramsF, tilts)
     return phase
 end
 
+function get_phase_from_igrams_with_tilts(
+    igramsF,
+    ref::Integer,
+    dirs::Vector{String},
+    tiltsmethod::TiltExtractionAlg,
+    psimethod::PSIAlg,
+)
+    idiffs = diffirst(igramsF)
+    # Extract  tilts with tilts method
+    tilts = tiltsmethod(idiffs)
+
+    # Change the order of the interferograms
+
+    phase = psimethod(reorder(igramsF, tilts, ref)...)
+    return phase
+end
+
 export get_phase_from_igrams_with_tilts, get_tilt_dirs
+export get_aperture
 
 end
