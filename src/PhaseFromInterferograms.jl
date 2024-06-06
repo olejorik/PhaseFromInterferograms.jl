@@ -230,13 +230,22 @@ function get_phase_from_igrams_with_tilts(
     tiltsmethod::TiltExtractionAlg,
     psimethod::PSIAlg,
 )
-    idiffs = diffirst(igramsF)
+    idiffs = diffirst(igramsF, ref)
     # Extract  tilts with tilts method
     tilts = tiltsmethod(idiffs)
+    # get signs of the restored tilts
+    s = getsign.(tilts, deleteat!(dirs, ref))
+    tilts .*= s
 
     # Change the order of the interferograms
-
-    phase = psimethod(reorder(igramsF, tilts, ref)...)
+    # phase = psimethod(reorder(igramsF, tilts, ref)...)
+    n = length(igramsF)
+    @assert ref <= n
+    perm = collect(1:n)
+    perm[1] = ref
+    perm[ref] = 1
+    phase = psimethod(igramsF[perm], tilts)
+    #
     return phase
 end
 

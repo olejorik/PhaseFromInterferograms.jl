@@ -1,6 +1,7 @@
 
 
 diffirst(v) = [t .- v[1] for t in v[2:end]]
+diffirst(v, i) = [t .- v[i] for t in v[vcat(1:(i - 1), (i + 1):end)]]
 
 function get_direction_from_filename(s::String, base::String)
     bname = splitext(s)[1]
@@ -27,6 +28,8 @@ function get_tilt_dirs(fn::Vector{String})
 end
 
 dirtov = (o=[0, 0], v=[0, 1], h=[1, 0], d=[1, 1])
+dirtov = (o=[0, 0], l=[0, -1], r=[0, 1], u=[1, 0], d=[-1, 0])
+
 
 function getsign(tilt, n::Vector)
     # return 2Int(dotproduct([tilt[1, 2] - tilt[1, 1], tilt[2, 1] - tilt[1, 1]], n) >= 0) - 1
