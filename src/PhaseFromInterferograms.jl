@@ -163,14 +163,21 @@ struct diffPSI <: PSIAlg end
 struct LSPSI <: PSIAlg end
 
 (::diffPSI)(images, deltas) = get_diff_phase_from_n_psi(images, deltas)
-(::LSPSI)(images, deltas) =
+function (::LSPSI)(images, deltas; full=false)
     if length(images) == length(deltas)
-        get_LS_phase_from_n_psi(images, deltas)[1]
+        ret = get_LS_phase_from_n_psi(images, deltas)
     else
         @info "Assuming the first delta is zero"
         fulldeltas = [[zero(deltas[1])]; deltas]
-        get_LS_phase_from_n_psi(images, fulldeltas)[1]
+        ret = get_LS_phase_from_n_psi(images, fulldeltas)
     end
+    if full
+        return ret
+    else
+        return ret[1]
+    end
+end
+
 
 function reorder(images, deltas, ref)
     if length(images) == length(deltas)
@@ -228,23 +235,26 @@ function get_phase_from_igrams_with_tilts(
     ref::Integer,
     dirs::Vector{String},
     tiltsmethod::TiltExtractionAlg,
-    psimethod::PSIAlg,
+    psimethod::PSIAlg;
+    kwargs...,
 )
     idiffs = diffirst(igramsF, ref)
     # Extract  tilts with tilts method
     tilts = tiltsmethod(idiffs)
     # get signs of the restored tilts
-    s = getsign.(tilts, deleteat!(dirs, ref))
+    s = getsign.(tilts, deleteat!(copy(dirs), ref))
     tilts .*= s
 
     # Change the order of the interferograms
     # phase = psimethod(reorder(igramsF, tilts, ref)...)
-    n = length(igramsF)
-    @assert ref <= n
-    perm = collect(1:n)
-    perm[1] = ref
-    perm[ref] = 1
-    phase = psimethod(igramsF[perm], tilts)
+    # n = length(igramsF)
+    # @assert ref <= n
+    # perm = collect(1:n)
+    # perm[1] = ref
+    # perm[ref] = 1
+    #
+    # No, just insert zero tilt in the needed position
+    phase = psimethod(igramsF, insert!(tilts, ref, zero(tilts[1])); kwargs...)
     #
     return phase
 end
