@@ -75,3 +75,26 @@ function getslopes(tilt)
     x, y = Int.(round.(size(tilt) ./ 2))
     return getslopes(tilt, x, y)
 end
+
+
+function reorder(images, deltas, ref)
+    if length(images) == length(deltas)
+        fulldeltas = deltas
+    else
+        @info "Assuming the first delta is zero"
+        fulldeltas = [[zero(deltas[1])]; deltas]
+        removefirst = true
+    end
+    n = length(images)
+    @assert ref <= n
+    perm = collect(1:n)
+    perm[1] = ref
+    perm[ref] = 1
+    imnew = images[perm]
+    deltasnew = fulldeltas[perm] .- [fulldeltas[ref]]
+    if removefirst
+        return imnew, deltasnew[2:end]
+    else
+        return imnew, deltasnew
+    end
+end
