@@ -27,8 +27,10 @@ function get_tilt_dirs(fn::Vector{String})
     return get_direction_from_filename.(fn, base)
 end
 
-dirtov = (o=[0, 0], v=[0, 1], h=[1, 0], d=[1, 1])
-dirtov = (o=[0, 0], l=[0, -1], r=[0, 1], u=[1, 0], d=[-1, 0])
+# below comes as kwarg to getsign function
+# dirtov = (o=[0, 0], v=[0, 1], h=[1, 0], d=[1, 1])
+# dirtov = (o=[0, 0], l=[0, -1], r=[0, 1], u=[1, 0], d=[-1, 0])
+_dirtov = (o=[0, 0], l=[0, 1], r=[0, -1], u=[1, 0], d=[-1, 0])
 
 
 function getsign(tilt, n::Vector)
@@ -37,7 +39,12 @@ function getsign(tilt, n::Vector)
     return 2Int((n' * [s...]) >= 0) - 1
 end
 
-getsign(tilt, dir::String) = getsign(tilt, dirtov[Symbol(dir)])
+function getsign(tilt, dir::String; dirtov=_dirtov, kwargs...)
+    options = merge(dirtov, kwargs)
+    # calculations
+    actualdirtov = options.dirtov
+    return getsign(tilt, actualdirtov[Symbol(dir)])
+end
 
 function get_aperture(igramsF, relative_threshold=1.3)
     i3d = stack(igramsF)

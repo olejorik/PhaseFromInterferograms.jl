@@ -163,6 +163,7 @@ struct diffPSI <: PSIAlg end
 struct LSPSI <: PSIAlg end
 
 (::diffPSI)(images, deltas) = get_diff_phase_from_n_psi(images, deltas)
+
 function (::LSPSI)(images, deltas; full=false)
     if length(images) == length(deltas)
         ret = get_LS_phase_from_n_psi(images, deltas)
@@ -242,7 +243,7 @@ function get_phase_from_igrams_with_tilts(
     # Extract  tilts with tilts method
     tilts = tiltsmethod(idiffs)
     # get signs of the restored tilts
-    s = getsign.(tilts, deleteat!(copy(dirs), ref))
+    s = getsign.(tilts, deleteat!(copy(dirs), ref); kwargs...)
     tilts .*= s
 
     # Change the order of the interferograms
