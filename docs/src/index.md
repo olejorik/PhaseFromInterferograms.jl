@@ -8,5 +8,5 @@ CurrentModule = PhaseFromInterferograms
 ```
 
 ```@autodocs
-Modules = [PhaseFromInterferograms]
+Modules = [PhaseFromInterferograms, Windowing, FindHarmonics, zoomFFT2D]
 ```
