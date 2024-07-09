@@ -29,7 +29,7 @@ end
 Calculate exp(coef * x^2)
 """
 function expsquared(x, coef)
-    return exp.(coef .* x .^ 2)
+    return exp.(coef .* (x .^ 2))
 end  # function expsquared
 
 """
@@ -149,7 +149,7 @@ function (f::FFT2Zoom)(x)
 end
 
 """
-    findfirstharmonic2(a, zoomlevels = nothing) ->last_freqs, amp_hyst, freqs_hyst
+    findfirstharmonic2(a, zoomlevels = nothing) ->(freqs, amp), amp_hist, freqs_hist
 
 Find first harmonic in a 2D array `a` with subpixel precision, using sequential FFT2Zoom with `zoomlevels`
 """
@@ -185,12 +185,12 @@ function findfirstharmonic2(
 
 
 
-    Mset = 1:arrsize[1]
-    Nset = 1:arrsize[2]
+    Mset = 0:(arrsize[1] - 1)
+    Nset = 0:(arrsize[2] - 1)
 
     last_freqs = copy(rough_freqs)
-    freqs_hyst = []
-    amp_hyst = []
+    freqs_hist = []
+    amp_hist = []
     for zoom in zoomlevels
         # zoom = zoomlevels[2]
 
@@ -204,10 +204,10 @@ function findfirstharmonic2(
         fine_freqs = [Rset[jjj[1]], Sset[jjj[2]]]
 
         last_freqs .= fine_freqs
-        push!(freqs_hyst, fine_freqs)
-        push!(amp_hyst, amp)
+        push!(freqs_hist, fine_freqs)
+        push!(amp_hist, amp)
     end
-    return last_freqs, amp_hyst, freqs_hyst
+    return (last_freqs, angle(last(amp_hist))), amp_hist, freqs_hist
 end  # function findfirstharmonic
 
 """
@@ -220,7 +220,7 @@ function removeDC(a, erasesize=0)
     aaa = FFTView(spectrum)
     I1 = one(CartesianIndex{ndims(aaa)})
     aaa[(-erasesize * I1):(erasesize * I1)] .= 0
-    return real(ifft(spectrum))
+    return ifft(spectrum)
 end  # function removeDC
 
 # to make it compatible with Quarto, not needed in the final version of the module

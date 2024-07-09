@@ -19,7 +19,7 @@ end
         @test all(1 .+ abs.(spec) .≈ 1)
 
         for zl in [[1], [1, 2], [1, 8], [1, 2, 16], nothing]
-            fhat = findfirstharmonic2(sig; zoomlevels=zl)[1]
+            fhat, sigma = findfirstharmonic2(sig; zoomlevels=zl)[1]
             fhat = flipsign.(fhat, fhat[1])
             @test all(fhat .≈ [f1, f2])
             # @show fhat
@@ -33,7 +33,7 @@ end
         sigs = cis.(tilts)
         specs = fft(sigs)
         for zl in [[1], [1, 2], [1, 8], [1, 2, 16], nothing]
-            fhat = findfirstharmonic2(sigs; zoomlevels=zl)[1]
+            fhat, sigma = findfirstharmonic2(sigs; zoomlevels=zl)[1]
             fhat = flipsign.(fhat, fhat[1])
             scale = isnothing(zl) ? minimum(arrsize) : last(zl)
             @test all(abs.(fhat .- [f1s, f2s]) .* arrsize .* scale .< 0.50001) # approximately 0.5
