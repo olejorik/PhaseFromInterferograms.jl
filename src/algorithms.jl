@@ -6,20 +6,23 @@
 abstract type AbstractAlg end
 
 
+# ##############################
 # Algorithms for tilt extraction
 # ##############################
 
 abstract type TiltExtractionAlg <: AbstractAlg end
 
-struct RoughTilts <: TiltExtractionAlg
-    erasesize::Int
-    selectsize::Int
+@kwdef struct RoughTilts <: TiltExtractionAlg
+    erasesize::Int = 2
+    selectsize::Int = 2
 end
 
-RoughTilts() = RoughTilts(2, 2)
-
-struct FineTilts <: TiltExtractionAlg end
-
+@kwdef struct FineTilts <: TiltExtractionAlg
+    zoomlevels = nothing
+    erasesize = 2
+    cropsize = 2
+    normals
+end
 
 
 
@@ -32,13 +35,63 @@ function (alg::RoughTilts)(idiffs)
     tilts .*= s
     return tilts
 end
+
 (::FineTilts)(idiffs) = [getfinetilt(id)[1] for id in idiffs]
 
+
+function gettilts(idiffs, alg::FineTilts)
+    tilts = copy(idiffs)
+    taus = zeros(length(idiffs), 2)
+    sigmas = zeros(length(idiffs))
+    arrsize = size(idiffs[1])
+    for i in eachindex(idiffs)
+        tilt, τ, σ = getfinetilt(
+            idiff;
+            n=alg.normals[i],
+            zoomlevels=alg.zoomlevels,
+            erasesize=alg.erasesize,
+            cropsize=alg.cropsize,
+            visualdebug=false,
+        )
+        tilts[i] .= tilt
+        taus[i] .= τ
+        sigmas[i] = σ
+    end
+    return tilts, taus, sigmas
+end
+
+
+
+# ##################################################
 # Algorithms for Phase-Shifting Interferometry (PSI)
 # ##################################################
 
+"""
+    PSIAlg <: AbstractAlg
 
+An abstract algorithm for Phase-shifting Interferometry (PSI).
+
+`(alg::PSIAlg)(measurements, deltas)` extracts the phase `ϕ` from several `measurements` Iₖ = b + a cos(ϕ + δₖ).
+
+`deltas` is an array of δₖ and it should be the same length as the number of `measurements` or one less. In this case, δ₁ is asuumed to be zero.
+
+"""
 abstract type PSIAlg <: AbstractAlg end
+
+function (alg::PSIAlg)(images, deltas)
+    if length(images) == length(deltas)
+        ret = get_phase_from_n_psi(images, deltas, alg)
+    else
+        @info "Assuming the first delta is zero"
+        fulldeltas = [[zero(deltas[1])]; deltas]
+        ret = get_phase_from_n_psi(images, fulldeltas, alg)
+    end
+    return ret
+end
+
+get_phase_from_n_psi(images, deltas, alg::PSIAlg; kwargs...) =
+    error("$(typeof(alg)) is not implemented")
+
 struct diffPSI <: PSIAlg end
 struct LSPSI <: PSIAlg end
 
@@ -58,6 +111,13 @@ function (::LSPSI)(images, deltas; full=false)
         return ret[1]
     end
 end
+
+
+
+
+# ############################################
+# Algorithms for phase extraction from several interferograms with unknown tilts
+# ############################################
 
 
 function get_phase_from_igrams_with_tilts(

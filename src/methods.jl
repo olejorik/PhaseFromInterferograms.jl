@@ -1,50 +1,84 @@
 # Methods usded for the algorithms
 
+######################
+# Tilt from parameters
+######################
+
+"""
+    fourier_tilt(τ, σ, arrsize, fftshift = false)
+
+Construct an array of values of linear function `t(x) = τ⋅x +σ` compatible with Fourier transform coordinates, that is `T(ξ)=F(exp(i t(x)))` has maximum at `ξ=τ/(2π)`. Coordinates: `ξ` is defined by `fftfreq`, `x` defined with the origin at `arrsize÷2+1` for `fftshift = true` and with the origin at at the first element of the array if `fftshift = false`.
+"""
+function fourier_tilt(τ, σ, arrsize, fftshift=false)
+    @assert length(τ) == length(arrsize)
+    if fftshift
+        coord = [fftshift(fftfreq(d, d)) for d in arrsize]
+    else
+        coord = [0:(d - 1) for d in arrsize]
+    end
+    tilt = σ .+ reshape([[τ...]' * [i...] for i in Iterators.product(coord...)], arrsize)
+
+    return tilt
+end
+
 # ###############
 # Tilt extraction
 # ###############
 
 """
-    get_tilt(idiff)
+    get_tilt(idiff, erasesize=3, selectsize=3, debug=false)
 
-Get the tilt from the interferogram difference
+Get the approximate tilt from the interferogram difference through the inverse Fourier of the part of the Fourier spectrum of `idiff` loacated around the position of the maximal side lobe.
+
+Parameters:
+ - `erasesize` -- minimal distance from the sidelobe to the DC component
+ - `selectsize` -- number of the neigbour Fourier components to include in the tilt reconstruction.
 """
 function get_tilt(idiff, erasesize=3, selectsize=3, debug=false)
     spectrum = fft(idiff .^ 2)
-    eraseZerothOrder!(spectrum)
-    aaa = FFTView(spectrum)
-    bbb = zeros(ComplexF32, size(spectrum))
-    bbbFV = FFTView(bbb)
+    eraseZerothOrder!(spectrum; erasesize=erasesize)
 
+    # Calculate frequencies
     iii = argmax(abs.(spectrum))
+    freqs = [fftfreq(size(idiff)[d])[iii[d]] for d in eachindex(Tuple(iii))]
+
     if debug
         println("max position $iii")
         println("max value is $(spectrum[iii])\n")
     end
 
-    # Calculate frequencies
-    freqs = [fftfreq(size(idiff)[d])[iii[d]] for d in eachindex(Tuple(iii))]
-
     # select
 
-    bbox = selectsize
-    bbbFV[(iii - CartesianIndex(bbox, bbox)):(iii + CartesianIndex(bbox, bbox))] .= aaa[(iii - CartesianIndex(
-        bbox, bbox
-    )):(iii + CartesianIndex(bbox, bbox))]
+    aaa = FFTView(spectrum)
+    bbb = zeros(ComplexF32, size(spectrum))
+    bbbFV = FFTView(bbb)
 
+    bbox = selectsize
+    ind1 = one(iii)
+    bbbFV[(iii - bbox * ind1):(iii + bbox * ind1)] .= aaa[(iii - bbox * ind1):(iii + bbox * ind1)]
+
+    # delta = angle.(ifft(bbb))
     delta = angle.(ifft(-bbb)) # add π
     return delta, freqs
 end  # function get_tilt
 
 
 """
-    getfinetilt(idiff, n=[1, -1]) -> tilt, τ, σ
+    getfinetilt(idiff; n=[1, 0], zoomlevels=nothing, visualdebug=false, erasesize=2, cropsize=2) -> tilt, τ, σ
 
 TBW
 """
-function getfinetilt(idiff, n=[1, 1])
+function getfinetilt(
+    idiff; n=[1, 0], zoomlevels=nothing, visualdebug=false, erasesize=2, cropsize=2
+)
     arrsize = size(idiff)
-    res = findfirstharmonic2(idiff .^ 2; visualdebug=false)
+    res = findfirstharmonic2(
+        idiff .^ 2;
+        zoomlevels=zoomlevels,
+        visualdebug=visualdebug,
+        erasesize=erasesize,
+        cropsize=cropsize,
+    )
     τ = res[1]
     σ = angle(res[2][end]) - π
     if dotproduct(τ, n) < 0
@@ -52,6 +86,7 @@ function getfinetilt(idiff, n=[1, 1])
         σ *= -1
     end
     tilt = σ .+ [2π * (i * τ[1] + j * τ[2]) for i in 1:arrsize[1], j in 1:arrsize[2]]
+    # tilt = fourier_tilt(τ, σ, arrsize)
     return tilt, τ, σ
 end
 
@@ -61,10 +96,10 @@ end
 
 
 """
-    get_phase_from_n_psi(images, deltas)
+    get_diff_phase_from_n_psi(images, deltas)
 
-Given n interferometric `images` with known phase shifts `deltas` between them,
-reconstruct the phase.
+Given n+1 interferometric `images` with n known phase shifts `deltas` between them,
+reconstruct the phase using the phase-difference-based approach.
 """
 function get_diff_phase_from_n_psi(images, deltas)
     n = length(deltas)
@@ -96,7 +131,7 @@ end
     get_LS_ phase_from_n_psi(images, deltas)
 
 Given n interferometric `images` with known phase shifts `deltas` between them,
-reconstruct the phase using the least-squares diversity -based method.
+reconstruct the phase using the least-squares diversity-based method.
 """
 function get_LS_phase_from_n_psi(images, deltas)
     n = length(deltas)
