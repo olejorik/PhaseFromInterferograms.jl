@@ -159,9 +159,9 @@ function findfirstharmonic2(
     arrsize = size(a)
 
     if isnothing(zoomlevels)
-        zoomlevels = [
-            1, 2, 4, 8, 16, minimum(arrsize) ÷ 4, minimum(arrsize) ÷ 2, minimum(arrsize)
-        ]
+        zl = [1, 2, 4, 8, 16, minimum(arrsize) ÷ 4, minimum(arrsize) ÷ 2, minimum(arrsize)]
+    else
+        zl = zoomlevels
     end
 
     freqrange = fftfreq.(arrsize)
@@ -185,14 +185,14 @@ function findfirstharmonic2(
 
 
 
-    Mset = 0:(arrsize[1] - 1)
-    Nset = 0:(arrsize[2] - 1)
+    Mset = (1:arrsize[1]) .- 1
+    Nset = (1:arrsize[2]) .- 1
 
     last_freqs = copy(rough_freqs)
     freqs_hist = []
     amp_hist = []
-    for zoom in zoomlevels
-        # zoom = zoomlevels[2]
+    for zoom in zl
+        # zoom = zl[2]
 
         Rset = (fftshift(freqrange[1]) .- last_freqs[1]) / zoom .+ last_freqs[1]
         Sset = (fftshift(freqrange[2]) .- last_freqs[2]) / zoom .+ last_freqs[2]
@@ -204,6 +204,8 @@ function findfirstharmonic2(
         fine_freqs = [Rset[jjj[1]], Sset[jjj[2]]]
 
         last_freqs .= fine_freqs
+        # @show last_freqs
+        # @show fine_freqs
         push!(freqs_hist, fine_freqs)
         push!(amp_hist, amp)
     end

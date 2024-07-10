@@ -4,7 +4,7 @@ using PhaseFromInterferograms, CairoMakie
 using FFTW, FFTViews
 using PhaseFromInterferograms.zoomFFT2D: removeDC, FFT2Zoom
 import PhaseFromInterferograms.zoomFFT2D: findfirstharmonic2
-function findfirstharmonic2(
+function findfirstharmonic2visual(
     a; zoomlevels=nothing, visualdebug=false, erasesize=2, cropsize=2
 )
     arrsize = size(a)

@@ -21,7 +21,7 @@ end
     zoomlevels = nothing
     erasesize = 2
     cropsize = 2
-    normals
+    normals = [nothing]
 end
 
 
@@ -44,9 +44,14 @@ function gettilts(idiffs, alg::FineTilts)
     taus = zeros(length(idiffs), 2)
     sigmas = zeros(length(idiffs))
     arrsize = size(idiffs[1])
+    if length(alg.normals) == 1
+        normals = fill(alg.normals[1], length(idiffs))
+    else
+        normals = alg.normals
+    end
     for i in eachindex(idiffs)
         tilt, τ, σ = getfinetilt(
-            idiff;
+            idiffs[i];
             n=alg.normals[i],
             zoomlevels=alg.zoomlevels,
             erasesize=alg.erasesize,
@@ -54,7 +59,7 @@ function gettilts(idiffs, alg::FineTilts)
             visualdebug=false,
         )
         tilts[i] .= tilt
-        taus[i] .= τ
+        taus[i, :] .= τ
         sigmas[i] = σ
     end
     return tilts, taus, sigmas

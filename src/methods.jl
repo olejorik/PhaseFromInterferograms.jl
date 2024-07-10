@@ -69,24 +69,31 @@ end  # function get_tilt
 TBW
 """
 function getfinetilt(
-    idiff; n=[1, 0], zoomlevels=nothing, visualdebug=false, erasesize=2, cropsize=2
+    idiff; n=[1, 1], zoomlevels=nothing, visualdebug=false, erasesize=2, cropsize=2
 )
-    arrsize = size(idiff)
-    res = findfirstharmonic2(
-        idiff .^ 2;
-        zoomlevels=zoomlevels,
-        visualdebug=visualdebug,
-        erasesize=erasesize,
-        cropsize=cropsize,
-    )
-    τ = res[1]
-    σ = angle(res[2][end]) - π
-    if dotproduct(τ, n) < 0
-        τ .*= -1
-        σ *= -1
+    # process default normal
+    if isnothing(n)
+        n = [1, 1]
     end
-    tilt = σ .+ [2π * (i * τ[1] + j * τ[2]) for i in 1:arrsize[1], j in 1:arrsize[2]]
-    # tilt = fourier_tilt(τ, σ, arrsize)
+
+    arrsize = size(idiff)
+    τ, σ = first(
+        findfirstharmonic2(
+            idiff .^ 2;
+            zoomlevels=zoomlevels,
+            visualdebug=visualdebug,
+            erasesize=erasesize,
+            cropsize=cropsize,
+        ),
+    )
+    # @show τ, σ
+    σ -= π
+    if dotproduct(τ, n) < 0
+        τ = -τ
+        σ += π
+    end
+    # tilt = σ .+ [2π * (i * τ[1] + j * τ[2]) for i in 1:arrsize[1], j in 1:arrsize[2]]
+    tilt = fourier_tilt(τ, σ, arrsize)
     return tilt, τ, σ
 end
 
