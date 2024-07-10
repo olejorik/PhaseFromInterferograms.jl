@@ -77,7 +77,7 @@ function getfinetilt(
     end
 
     arrsize = size(idiff)
-    τ, σ = first(
+    (f, σ) = first(
         findfirstharmonic2(
             idiff .^ 2;
             zoomlevels=zoomlevels,
@@ -87,13 +87,14 @@ function getfinetilt(
         ),
     )
     # @show τ, σ
-    σ -= π
-    if dotproduct(τ, n) < 0
-        τ = -τ
-        σ += π
+    if dotproduct(f, n) < 0
+        f .*= -1
+        σ *= -1
     end
+    τ = 2π .* f
+    σ = phwrap(σ + π)
     # tilt = σ .+ [2π * (i * τ[1] + j * τ[2]) for i in 1:arrsize[1], j in 1:arrsize[2]]
-    tilt = fourier_tilt(τ, σ, arrsize)
+    tilt = fourier_tilt(2π * f, σ, arrsize)
     return tilt, τ, σ
 end
 
