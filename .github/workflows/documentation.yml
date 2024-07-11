@@ -27,8 +27,8 @@ jobs:
         run: |
           julia --project=docs -e '
             using Pkg
-            Pkg.add(url = "https://github.com/olejorik/SampledDomains.jl")
             Pkg.add(url = "https://github.com/olejorik/PhaseUtils.jl")
+            Pkg.add(url = "https://github.com/olejorik/SampledDomains.jl")
             Pkg.add(url = "https://github.com/olejorik/PhasePlots.jl")
             Pkg.add(url = "https://github.com/olejorik/PhaseBases.jl")
             Pkg.develop(PackageSpec(path=pwd()))
