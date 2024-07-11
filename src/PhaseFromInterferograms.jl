@@ -25,6 +25,6 @@ export get_tilt, fourier_tilt
 
 include("algorithms.jl")
 export RoughTilts, FineTilts, diffPSI, LSPSI, PSIAlg, TiltExtractionAlg
-export get_phase_from_igrams_with_tilts, get_tilt_dirs
+export get_phase_from_igrams_with_tilts, get_tilt_dirs, get_phase_from_n_psi
 
 end
