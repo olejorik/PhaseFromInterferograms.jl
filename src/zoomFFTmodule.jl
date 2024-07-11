@@ -172,17 +172,10 @@ function findfirstharmonic2(
     # signal = a
     spectrum = fft(signal)
 
-
-    aaa = FFTView(spectrum)
+    absspectrum = FFTView(abs.(spectrum))
     freqrange0 = FFTView.(freqrange)
-    iii = argmax(abs.(aaa))
+    iii = argmax(absspectrum)
     rough_freqs = [freqrange0[i][iii[i]] for i in 1:length(iii)]
-
-    # cropsize = 2
-    indexcrop = CartesianIndex(cropsize, cropsize)
-    xfreqs = freqrange0[1][(iii[1] - cropsize):(iii[1] + cropsize)]
-    yfreqs = freqrange0[2][(iii[2] - cropsize):(iii[2] + cropsize)]
-
 
 
     Mset = (1:arrsize[1]) .- 1
