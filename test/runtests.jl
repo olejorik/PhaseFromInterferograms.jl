@@ -1,5 +1,6 @@
 using PhaseFromInterferograms
 using Test
+using FFTW
 
 @testset "PhaseFromInterferograms.jl" begin
     # Write your tests here.

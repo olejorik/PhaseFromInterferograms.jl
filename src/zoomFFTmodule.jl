@@ -175,7 +175,7 @@ function findfirstharmonic2(
 
     aaa = FFTView(spectrum)
     freqrange0 = FFTView.(freqrange)
-    iii = argmax(abs.(aaa[0:(arrsize[1] ÷ 2), :]))
+    iii = argmax(abs.(aaa))
     rough_freqs = [freqrange0[i][iii[i]] for i in 1:length(iii)]
 
     # cropsize = 2
