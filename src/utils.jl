@@ -3,6 +3,7 @@
 diffirst(v) = [t .- v[1] for t in v[2:end]]
 diffirst(v, i) = [t .- v[i] for t in v[vcat(1:(i - 1), (i + 1):end)]]
 
+
 function get_direction_from_filename(s::String, base::String)
     bname = splitext(s)[1]
     if bname == base

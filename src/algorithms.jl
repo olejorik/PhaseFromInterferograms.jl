@@ -94,7 +94,7 @@ function gettilts(idiffs, alg::FineTilts)
     for (i, id) in enumerate(idiffs)
         tilt, τ, σ = getfinetilt(
             id;
-            n=alg.normals[i],
+            n=normals[i],
             zoomlevels=alg.zoomlevels,
             erasesize=alg.erasesize,
             cropsize=alg.cropsize,
@@ -192,7 +192,7 @@ function get_phase_from_igrams_with_tilts(
 )
     idiffs = diffirst(igramsF)
     # Extract  tilts with tilts method
-    tilts = tiltsmethod(idiffs)
+    tilts = first(tiltsmethod(idiffs))
     # get signs of the restored tilts
     s = getsign.(tilts, dirs[2:end])
     tilts .*= s
