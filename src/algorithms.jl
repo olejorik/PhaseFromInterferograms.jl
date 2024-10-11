@@ -40,7 +40,7 @@ gettilts(idiffs, alg::TiltExtractionAlg) = error("Method $(typeof(alg)) is not i
 
 Simple method of extracting approximate tilts from an array of the interferogram differences based on the Fourier filtering.
 
-Paremeters:
+Parameters:
  - `erasesize` = 2 -- half-diameter of the central lobe to be excluded: block with size `2 erasesize + 1` centered around the origin
  - `selectsize` = 2 -- half diameter of the side lobe used to reconstruct the tilt: block with size `2 selectsize + 1` centerd around the maximum of the spectrum.
 """
@@ -54,7 +54,7 @@ end
 
 Method of extracting tilts from an array of the interferogram differences based on locating maxima in the spectra with subpixel accuracy using zoomFFT (aka CZT or Bluestein algorithm).
 
-Paremeters:
+Parameters:
  - `erasesize` = 2 -- half-diameter of the central lobe to be excluded: block with size `2 erasesize + 1` centered around the origin
  - `cropsize` = 2 -- half diameter of the side lobe used tolocate the maximum: block with size `2 cropsize + 1` centerd around the maximum of the spectrum.
  - `zoomlevels` = nothing -- array of zoomlevels used for iterational subpixel approximation. E.g. `zoomlevels = [1,4]` will first find the side lobe maximum in the original Fourier spectrum , and then in the spectrum sampled with 4 times higher rate. If set to `nothing` uses automatic sequence of the zoom levels.
