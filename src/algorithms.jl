@@ -210,7 +210,7 @@ function get_phase_from_igrams_with_tilts(
 )
     idiffs = diffirst(igramsF, ref)
     # Extract  tilts with tilts method
-    tilts = tiltsmethod(idiffs)
+    tilts, _, _ = tiltsmethod(idiffs)
     # get signs of the restored tilts
     s = getsign.(tilts, deleteat!(copy(dirs), ref); kwargs...)
     tilts .*= s
