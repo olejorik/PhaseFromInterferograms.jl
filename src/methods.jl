@@ -163,7 +163,7 @@ function get_LS_phase_from_n_psi(images, deltas)
     m33 = @. n^2 - abs2(s2)
 
     x = dotproduct([m11, m12, m13], ai) ./ den
-    b = dotproduct([m31, m32, m33], ai) ./ den
+    b = real(dotproduct([m31, m32, m33], ai) ./ den)
 
     return angle.(x), x, b
 end
