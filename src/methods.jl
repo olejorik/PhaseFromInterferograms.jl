@@ -16,7 +16,8 @@ function fourier_tilt(τ, σ, arrsize, fftshift=false)
     else
         coord = [0:(d - 1) for d in arrsize]
     end
-    tilt = σ .+ reshape([[τ...]' * [i...] for i in Iterators.product(coord...)], arrsize)
+    # tilt = σ .+ reshape([[τ...]' * [i...] for i in Iterators.product(coord...)], arrsize) # Too many allocations
+    tilt = σ .+ τ[1] * coord[1] .+ τ[2] * coord[2]'
 
     return tilt
 end
