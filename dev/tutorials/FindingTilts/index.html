@@ -11,25 +11,25 @@ i, j = 3, 8
 f1, f2 = getindex.(fftfreq.(arrsize), [i, j])
 offset = 2
 tilt = fourier_tilt(2π .* (f1, f2), offset, arrsize)
-showarray(tilt; axis=(title=L&quot;Linear function $t(x)$ &quot;,), rot=0)</code></pre><img src="481de867.png" alt="Example block output"/><p>and we can see that in the exponent it will create the linear phase term.</p><pre><code class="language-julia hljs">sig = cis.(tilt)
-showarray(angle.(sig); axis=(title=L&quot;Linear function $t(x)$ , wrapped&quot;,), rot=0)</code></pre><img src="312dbd77.png" alt="Example block output"/><p>Now examine its Fourier spectrum</p><pre><code class="language-julia hljs">spec = fft(sig)
+showarray(tilt; axis=(title=L&quot;Linear function $t(x)$ &quot;,), rot=0)</code></pre><img src="dd1db4b4.png" alt="Example block output"/><p>and we can see that in the exponent it will create the linear phase term.</p><pre><code class="language-julia hljs">sig = cis.(tilt)
+showarray(angle.(sig); axis=(title=L&quot;Linear function $t(x)$ , wrapped&quot;,), rot=0)</code></pre><img src="04051377.png" alt="Example block output"/><p>Now examine its Fourier spectrum</p><pre><code class="language-julia hljs">spec = fft(sig)
 showarray(
     abs.(spec);
     axis=(title=&quot;Power spectrum of the complex exponent of linear function&quot;,),
     rot=0,
-)</code></pre><img src="512f0714.png" alt="Example block output"/><p>Note that the only non-zero component has index (i,j)</p><pre><code class="language-julia hljs">scatter!(i, j; color=:red)
-current_figure()</code></pre><img src="81fece93.png" alt="Example block output"/><p>And its argument produces the original offset</p><pre><code class="language-julia hljs">angle(spec[i, j]) ≈ offset</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><p>Repeat the same example with subpixel coordinates</p><pre><code class="language-julia hljs">subpixelshifts = [0.1, 0.52]
+)</code></pre><img src="6725e6bf.png" alt="Example block output"/><p>Note that the only non-zero component has index (i,j)</p><pre><code class="language-julia hljs">scatter!(i, j; color=:red)
+current_figure()</code></pre><img src="833b1e4c.png" alt="Example block output"/><p>And its argument produces the original offset</p><pre><code class="language-julia hljs">angle(spec[i, j]) ≈ offset</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><p>Repeat the same example with subpixel coordinates</p><pre><code class="language-julia hljs">subpixelshifts = [0.1, 0.52]
 # subpixelshifts = rand(2) # or use rand(2)
 f1s, f2s = [f1, f2] .+ subpixelshifts ./ arrsize</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
  0.042
  0.21485714285714283</code></pre><p>Construct the tilt with subpixel frequencies.</p><pre><code class="language-julia hljs">tilts = fourier_tilt(2π .* (f1s, f2s), offset, arrsize)
-showarray(tilts; axis=(title=L&quot;Linear function $t(x)$ &quot;,), rot=0)</code></pre><img src="e261905f.png" alt="Example block output"/><p>It doesn&#39;t produce a periodic signal anymore!</p><pre><code class="language-julia hljs">sigs = cis.(tilts)
-showarray(angle.(sigs); axis=(title=L&quot;Linear function $2\pi t(x)$ , wrapped&quot;,), rot=0)</code></pre><img src="ec4a2baf.png" alt="Example block output"/><p>And that&#39;s why the Fourier spectrum demonstrates aliasing</p><pre><code class="language-julia hljs">specs = fft(sigs)
+showarray(tilts; axis=(title=L&quot;Linear function $t(x)$ &quot;,), rot=0)</code></pre><img src="e51abace.png" alt="Example block output"/><p>It doesn&#39;t produce a periodic signal anymore!</p><pre><code class="language-julia hljs">sigs = cis.(tilts)
+showarray(angle.(sigs); axis=(title=L&quot;Linear function $2\pi t(x)$ , wrapped&quot;,), rot=0)</code></pre><img src="9f22bd7f.png" alt="Example block output"/><p>And that&#39;s why the Fourier spectrum demonstrates aliasing</p><pre><code class="language-julia hljs">specs = fft(sigs)
 showarray(
     abs.(specs);
     axis=(title=&quot;Power spectrum of the complex exponent of linear function&quot;,),
     rot=0,
-)</code></pre><img src="f4eaff3a.png" alt="Example block output"/><p>We can detect frequencies both in periodic and non-periodic signals. We start with the periodic complex signal</p><p>Our algorithm  for the complex signal should behave the same at zoom level 1 as making the Fourier transform and taking the component with the max coordinate</p><pre><code class="language-julia hljs">(fhat, sigma), amp_hist, freqs_hist = findfirstharmonic2(sig; zoomlevels=[1])
+)</code></pre><img src="ea323bae.png" alt="Example block output"/><p>We can detect frequencies both in periodic and non-periodic signals. We start with the periodic complex signal</p><p>Our algorithm  for the complex signal should behave the same at zoom level 1 as making the Fourier transform and taking the component with the max coordinate</p><pre><code class="language-julia hljs">(fhat, sigma), amp_hist, freqs_hist = findfirstharmonic2(sig; zoomlevels=[1])
 @show fhat
 @show sigma
 @show all(fhat .≈ (f1, f2))
@@ -117,17 +117,17 @@ scatter!(scales, relerrsY; label=&quot;Y&quot;)
 lines!(scales, sqrt.(relerrsX .^ 2 .+ relerrsY .^ 2); label=&quot;joint x and y&quot;)
 ax.title = &quot;Relative error in frequency detection&quot;
 axislegend()
-fig</code></pre><img src="15eb5159.png" alt="Example block output"/><p>The offset error also decreases</p><pre><code class="language-julia hljs">fig, ax, l = lines(scales, sigmas; label=&quot;restored&quot;)
+fig</code></pre><img src="f3ee13e5.png" alt="Example block output"/><p>The offset error also decreases</p><pre><code class="language-julia hljs">fig, ax, l = lines(scales, sigmas; label=&quot;restored&quot;)
 hlines!(offset; label=&quot;GT&quot;, color=:orange)
 axislegend()
 ax.title = &quot;Offset detection&quot;
-fig</code></pre><img src="90a7d6a2.png" alt="Example block output"/><p>Thus, only from the real signal we have restored the parameters of its main harmonics (we have used however the <em>a priory</em> knowledge about the sign of the tilt). Finally, we can reconstruct the tilt from the found frequencies using the same function</p><pre><code class="language-julia hljs">fhat, sigma = findfirstharmonic2(real.(sigs))[1]
+fig</code></pre><img src="d62c0512.png" alt="Example block output"/><p>Thus, only from the real signal we have restored the parameters of its main harmonics (we have used however the <em>a priory</em> knowledge about the sign of the tilt). Finally, we can reconstruct the tilt from the found frequencies using the same function</p><pre><code class="language-julia hljs">fhat, sigma = findfirstharmonic2(real.(sigs))[1]
 sigma = flipsign(sigma, fhat[1])
 fhat = flipsign.(fhat, fhat[1])
 restored_tilt = fourier_tilt(2π * fhat, sigma, arrsize)
 fig, ax, hm = showarray(restored_tilt; axis=(title=L&quot;Restored function $t(x)$ &quot;,), rot=0);
 Colorbar(fig[1, 2], hm)
-fig</code></pre><img src="291a8560.png" alt="Example block output"/><p>And we check the error in the restoration</p><pre><code class="language-julia hljs">err_tilt = restored_tilt .- tilts
+fig</code></pre><img src="418100f6.png" alt="Example block output"/><p>And we check the error in the restoration</p><pre><code class="language-julia hljs">err_tilt = restored_tilt .- tilts
 fig, ax, hm = showarray(err_tilt; axis=(title=L&quot;Error $t(x) - \hat{t}(x)$ &quot;,), rot=0);
 Colorbar(fig[1, 2], hm)
-fig</code></pre><img src="c8a7305f.png" alt="Example block output"/><p>We see that the errror is quite small compared with the size of the tilt itself.</p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Friday 14 February 2025 14:37">Friday 14 February 2025</span>. Using Julia version 1.10.8.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+fig</code></pre><img src="3b29c617.png" alt="Example block output"/><p>We see that the errror is quite small compared with the size of the tilt itself.</p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Friday 7 March 2025 14:59">Friday 7 March 2025</span>. Using Julia version 1.10.8.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
