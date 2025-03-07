@@ -9,9 +9,9 @@
 
 Construct an array of values of linear function `t(x) = τ⋅x +σ` compatible with Fourier transform coordinates, that is `T(ξ)=F(exp(i t(x)))` has maximum at `ξ=τ/(2π)`. Coordinates: `ξ` is defined by `fftfreq`, `x` defined with the origin at `arrsize÷2+1` for `fftshift = true` and with the origin at at the first element of the array if `fftshift = false`.
 """
-function fourier_tilt(τ, σ, arrsize, fftshift=false)
+function fourier_tilt(τ, σ, arrsize, dofftshift=false)
     @assert length(τ) == length(arrsize)
-    if fftshift
+    if dofftshift
         coord = [fftshift(fftfreq(d, d)) for d in arrsize]
     else
         coord = [0:(d - 1) for d in arrsize]
