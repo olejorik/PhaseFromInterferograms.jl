@@ -8,7 +8,7 @@ using StatsBase
 include("utils.jl")
 export get_aperture
 
-include("PTI.jl")
+include("PTI_tensor.jl")
 
 include("Windowing.jl")
 using .Windowing
