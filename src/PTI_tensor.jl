@@ -15,7 +15,7 @@ Each interferogram `Iₙ` is modeled as `Iₙ = a + 2 Re (c dₙ) a + c dₙ +̄
 mask is the same for all the interferograms.
 
 """
-struct PTIestimate{M,TT}
+struct PTIestimate{M,TT,TFA,TSA}
     framesize::Int
     setsize::Int
     fullsize::NTuple{M,Int}
@@ -23,8 +23,8 @@ struct PTIestimate{M,TT}
     complexamplitude::Array{ComplexF64,M}
     mask::BitArray{M}
     tilts::Array{TT,M}
-    frameaxes::Vector{Vector{Float64}}
-    setaxes::Vector{Vector{Float64}}
+    frameaxes::TFA
+    setaxes::TSA
     igrams::Array{Float64,M}
     insync::Vector{Bool}
 end
@@ -35,8 +35,8 @@ function PTIestimate(
     K = length(framesize)
     M = length(setsize)
     fullsize = (framesize..., setsize...)
-    frameax = collect.(frameaxes(framesize))
-    setax = collect.(setaxes(setsize))
+    frameax = frameaxes(framesize)
+    setax = setaxes(setsize)
     return PTIestimate(
         K,
         M,
@@ -95,6 +95,14 @@ function get_diversed_complex_amplitude(p::PTIestimate, dims...)
     return complexamplitude(p) .* cis.(apply.(p.tilts, coords, (dims...,)))
 end
 
+function get_single_diversed_complex_amplitude!(arr, p::PTIestimate, i, dims...)
+    coords = Iterators.product(p.frameaxes...)
+    aaa = apply.((p.tilts[i],), coords, (dims...,))
+    @show size(aaa)
+    @show size(complexamplitude(p))
+    arr .= complexamplitude(p) .* cis.(apply.((p.tilts[i],), coords, (dims...,)))
+    return arr
+end
 
 function update_igrams!(p::PTIestimate)
     return p.igrams .= materialize.(p.tilts, (p.axes[1:(p.framesize)],))
@@ -107,6 +115,7 @@ abstract type Tilt end
 
 sigma(t::Tilt) = t.coefs[1]
 tau(t::Tilt) = t.coefs[2:end]
+tau(t::Tilt, j) = t.coefs[1 + j]
 setsigma!(t::Tilt, s) = (t.coefs[1] = s)
 settau!(t::Tilt, τ) = (t.coefs[2:end] .= τ)
 setall!(t::Tilt, v) = (t.coefs .= v)
@@ -146,6 +155,6 @@ struct FourierAxes <: ArrayAxes end
 struct DataAxes <: ArrayAxes end
 
 (alg::FourierAxes)(dims::NTuple) = [fftshift(fftfreq(d)) for d in dims]
-(alg::DataAxes)(dims::NTuple) = [collect(1.0:d) for d in dims]
+(alg::DataAxes)(dims::NTuple) = [1:d for d in dims]
 
 end # module PTI
