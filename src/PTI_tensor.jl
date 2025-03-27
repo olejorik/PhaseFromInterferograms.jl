@@ -1,7 +1,8 @@
-module PTI
+
 using StaticArrays
 using LinearAlgebra: dot
 using FFTW
+using PhaseUtils: diffirst
 
 import Base.zero
 
@@ -59,6 +60,8 @@ end
 PTIestimate(igrams::Array{T} where {T<:Array}; axes...) =
     PTIestimate(size(igrams[1]), size(igrams); axes...)
 
+#  Interfaces
+
 background(p::PTIestimate) = p.background
 complexamplitude(p::PTIestimate) = p.complexamplitude
 mask(p::PTIestimate) = p.mask
@@ -106,6 +109,43 @@ end
 
 function update_igrams!(p::PTIestimate)
     return p.igrams .= materialize.(p.tilts, (p.axes[1:(p.framesize)],))
+end
+
+framedims(p::PTIestimate) = Tuple(i for i in 1:(p.framesize))
+setdims(p::PTIestimate) = Tuple((i + p.framesize) for i in 1:(p.setsize))
+
+
+# Main functions
+function initialize!(p::PTIestimate, igrams, alg)
+    idiffs = diffirst(igrams)
+    # TODO refactor for any shape of setsize
+    tiltguess = (alg)(idiffs)
+    for (tp, tg) in zip(p.tilts, tiltguess)
+        setall!(tp, tg)
+    end
+end
+
+function set_tilt_signs!(p::PTIestimate, normals)
+    for (tp, n) in zip(p.tilts, normals)
+        if dot(tau(tp), n) < 0
+            tp.coefs .*= -1
+        end
+    end
+end
+
+
+function update_phase!(p::PTIestimate, igrams, alg)
+    a, c = alg(igrams, p.tilts)
+    setbackground!(p, a)
+    return setcomplexamplitude!(p, c)
+end
+
+function update_tilts!(p::PTIestimate, igrams, alg)
+    tiltguess = (alg)(igrams, background(p), complexamplitude(p), p.frameaxes)
+    for (tp, tg) in zip(p.tilts, tiltguess)
+        setall!(tp, tg)
+    end
+
 end
 
 
@@ -157,4 +197,4 @@ struct DataAxes <: ArrayAxes end
 (alg::FourierAxes)(dims::NTuple) = [fftshift(fftfreq(d)) for d in dims]
 (alg::DataAxes)(dims::NTuple) = [1:d for d in dims]
 
-end # module PTI
+# end # module PTI

@@ -29,7 +29,7 @@ end
 """
     get_tilt(idiff, erasesize=3, selectsize=3, debug=false)
 
-Get the approximate tilt from the interferogram difference through the inverse Fourier of the part of the Fourier spectrum of `idiff` loacated around the position of the maximal side lobe.
+Get the approximate tilt from the interferogram difference through the inverse Fourier of the part of the Fourier spectrum of `idiff` located around the position of the maximal side lobe.
 
 Parameters:
  - `erasesize` -- minimal distance from the sidelobe to the DC component
@@ -62,6 +62,7 @@ function get_tilt(idiff, erasesize=3, selectsize=3, debug=false)
     delta = angle.(ifft(-bbb)) # add π
     return delta, freqs
 end  # function get_tilt
+
 
 
 """

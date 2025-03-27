@@ -49,6 +49,7 @@ Parameters:
     selectsize::Int = 2
 end
 
+
 """
      FineTilts <: TiltExtractionAlg
 
@@ -67,6 +68,8 @@ Parameters:
     normals = [nothing]
 end
 
+
+#TODO write function for extraction of tilt from a single interferogram difference which returns just index  and phase of the sidelobe. Then the index is converted to tau using the correct axes
 
 
 function gettilts(idiffs, alg::RoughTilts)
