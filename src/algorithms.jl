@@ -231,3 +231,37 @@ function get_phase_from_igrams_with_tilts(
     #
     return phase
 end
+
+
+## Algorithms for side-lobe frequency detection
+
+abstract type SideLobeAlg <: AbstractAlg end
+
+"""
+    get_side_lobe_freq(idiff, alg::SideLobeAlg)
+Get the side lobe frequency from the interferogram difference `idiff` using `alg` method. Return the frequency and additional information depending on the method used.
+"""
+get_side_lobe_freq(idiff, alg::SideLobeAlg) =
+    error("Method $(typeof(alg)) is not implemented")
+
+# Simple methods based on FFT. They differ in the size of the maximum vicinity used to find the side lobe frequency (1,2, or 3 pixels).
+
+
+@kwdef struct FFTcrop1 <: SideLobeAlg
+    erazesize::Int = 2
+    window_scale::Float64 = 1 / 3
+end
+@kwdef struct FFTcrop2 <: SideLobeAlg
+    erazesize::Int = 2
+    window_scale::Float64 = 1 / 3
+end
+@kwdef struct FFTcrop3 <: SideLobeAlg
+    erazesize::Int = 2
+    window_scale::Float64 = 1 / 3
+end
+
+function get_side_lobe_freq(idiff, alg::FFTcrop1)
+    return FindHarmonics.findroughharmonic(
+        idiff; window_scale=alg.window_scale, erasesize=alg.erazesize, halfplane="none"
+    )
+end

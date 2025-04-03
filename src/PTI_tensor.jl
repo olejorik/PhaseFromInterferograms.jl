@@ -31,7 +31,7 @@ struct PTIestimate{M,TT,TFA,TSA}
 end
 
 function PTIestimate(
-    framesize::NTuple, setsize::NTuple; frameaxes=FourierAxes(), setaxes=DataAxes()
+    framesize::NTuple, setsize::NTuple; frameaxes=DataAxesCentered(), setaxes=DataAxes()
 )
     K = length(framesize)
     M = length(setsize)
@@ -57,7 +57,7 @@ function PTIestimate(
     )
 end
 
-PTIestimate(igrams::Array{T} where {T<:Array}; axes...) =
+PTIestimate(igrams::Union{Array{T} where {T<:Array},Slices}; axes...) =
     PTIestimate(size(igrams[1]), size(igrams); axes...)
 
 #  Interfaces
@@ -71,12 +71,14 @@ setsize(p::PTIestimate) = p.fullsize[(p.framesize + 1):(p.setsize + p.framesize)
 
 getphase(p::PTIestimate) = reshape(angle.(complexamplitude(p)), framesize(p))
 getigrams(p::PTIestimate) = p.insync[1] ? p.igrams : materialize!(p).igrams
+getigramssliced(p::PTIestimate) = eachslice(getigrams(p); dims=setdims(p))
+
 
 setbackground!(p::PTIestimate, b) = (p.insync .= false; p.background .= b)
 setcomplexamplitude!(p::PTIestimate, c) = (p.insync .= false; p.complexamplitude .= c)
 setmask!(p::PTIestimate, m) = (p.insync .= false; p.mask .= m)
 settilts!(p::PTIestimate, t) = (p.insync .= false; p.tilts .= t)
-setphase!(p, φ) = (setcomplexamplitude!(p, complexamplitude(p) .* cis.(φ)))
+setphase!(p, φ) = (setcomplexamplitude!(p, abs.(complexamplitude(p)) .* cis.(φ)))
 
 
 function materialize!(p::PTIestimate)
@@ -116,13 +118,20 @@ setdims(p::PTIestimate) = Tuple((i + p.framesize) for i in 1:(p.setsize))
 
 
 # Main functions
-function initialize!(p::PTIestimate, igrams, alg)
-    idiffs = diffirst(igrams)
-    # TODO refactor for any shape of setsize
-    tiltguess = (alg)(idiffs)
-    for (tp, tg) in zip(p.tilts, tiltguess)
-        setall!(tp, tg)
+function initialize!(p::PTIestimate, data, alg=FFTcrop1(); refframe=1)
+
+    for (i, igram) in pairs(IndexCartesian(), data)
+        if i == CartesianIndex(refframe)
+            tiltguess = FreeTilt([0.0, 0.0, 0.0])
+        else
+            idiffsq = (igram - data[refframe]) .^ 2
+            pos, freq, amp = get_side_lobe_freq(idiffsq, alg)
+            tiltguess = FreeTilt([-π - angle(amp), (2π * freq)...])
+        end
+        p.tilts[i] = tiltguess
     end
+    p.insync .= false
+    return p
 end
 
 function set_tilt_signs!(p::PTIestimate, normals)
@@ -134,8 +143,8 @@ function set_tilt_signs!(p::PTIestimate, normals)
 end
 
 
-function update_phase!(p::PTIestimate, igrams, alg)
-    a, c = alg(igrams, p.tilts)
+function update_background_amplitude!(p::PTIestimate, data, alg)
+    a, c = alg(data, p.tilts)
     setbackground!(p, a)
     return setcomplexamplitude!(p, c)
 end
@@ -162,7 +171,7 @@ setall!(t::Tilt, v) = (t.coefs .= v)
 materialize(t::Tilt, dims) =
     [sigma(t) + dot(tau(t), x) for x in Iterators.product(fftshift.(fftfreq.(dims))...)]
 
-materialize(t::Tilt, axes::Vector{T} where {T<:Vector}) =
+materialize(t::Tilt, axes::Vector{T} where {T<:AbstractVector}) =
     [sigma(t) + dot(tau(t), x) for x in Iterators.product(axes...)]
 
 
@@ -193,8 +202,11 @@ apply(t::Tilt, x, dims) = sum(t.coefs[i + 1] * get(x, i, 1) for i in dims)
 abstract type ArrayAxes end
 struct FourierAxes <: ArrayAxes end
 struct DataAxes <: ArrayAxes end
+struct DataAxesCentered <: ArrayAxes end
+
 
 (alg::FourierAxes)(dims::NTuple) = [fftshift(fftfreq(d)) for d in dims]
 (alg::DataAxes)(dims::NTuple) = [1:d for d in dims]
+(alg::DataAxesCentered)(dims::NTuple) = [fftshift(fftfreq(d, d)) for d in dims]
 
 # end # module PTI
