@@ -1,5 +1,5 @@
 using PhaseFromInterferograms
-using Documenter, Literate
+using Documenter, Literate, LaTeXStrings
 
 DocMeta.setdocmeta!(
     PhaseFromInterferograms, :DocTestSetup, :(using PhaseFromInterferograms); recursive=true
@@ -29,7 +29,11 @@ makedocs(;
     ),
     clean=false,
     pages=[
-        "Home" => "index.md", "Manual" => ["Finding tilts" => "tutorials/FindingTilts.md"]
+        "Home" => "index.md",
+        "Manual" => [
+            "Finding tilts" => "tutorials/FindingTilts.md",
+            "PTIestimate Structure" => "tutorials/PTIestimate_tutorial.md",
+        ],
     ],
 )
 

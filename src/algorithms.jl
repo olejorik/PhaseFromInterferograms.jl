@@ -164,6 +164,7 @@ function (::LSPSI)(images, deltas; full=false)
         @info "Assuming the first delta is zero"
         fulldeltas = [[zero(deltas[1])]; deltas]
         ret = get_LS_phase_from_n_psi(images, fulldeltas)
+
     end
     if full
         return ret
