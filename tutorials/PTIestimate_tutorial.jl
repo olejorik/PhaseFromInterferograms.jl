@@ -2,11 +2,12 @@
 #
 # ## Introduction
 #
-# This tutorial demonstrates the use of the [`PTIestimate`](@ref) structure for Phase-Tilted Interferometry (PTI) analysis. The PTIestimate structure serves as a comprehensive model representation that can be used for:
-# 1. Problem formulation for PTI analysis
-# 2. State container for iterative algorithms
-# 3. Forward model for generating synthetic interferograms
-# 4. Unified interface for both iterative and non-iterative algorithms
+# This tutorial demonstrates the use of the [`PTIestimate`](@ref) structure for Phase-Tilted Interferometry (PTI) analysis. The PTIestimate structure serves as a comprehensive framework that supports two primary use cases:
+#
+# 1. **Forward Modeling**: Generate synthetic interferograms from known phase and tilt parameters
+# 2. **Inverse Problems**: Estimate phase and tilts from measured interferogram data
+#
+# The structure provides a unified interface for both scenarios, with the key distinction being whether measured data is provided or not.
 
 using PhaseFromInterferograms
 const PTI = PhaseFromInterferograms
@@ -22,197 +23,253 @@ CairoMakie.activate!(; type="png")
 coligram = :linear_blue_95_50_c20_n256
 coligramdiff = :diverging_gwr_55_95_c38_n256;
 
-# ## 1. Creating a PTIestimate from Interferograms
+# # Part I: Forward Modeling with PTIestimate
 #
-# We start by creating a set of synthetic interferograms and then constructing a PTIestimate object.
+# In forward modeling, we create a PTIestimate structure to generate synthetic interferograms from known parameters. This is useful for algorithm development, testing, and educational purposes.
 
-# Create synthetic interferogram data
-igrams = [rand(500, 800) for _ in 1:15];
+# ## 1. Creating PTIestimate for Forward Modeling
+#
+# We start by creating a PTIestimate structure from dimensions only, without any measured data.
 
-# Create the PTIestimate object with Fourier coordinate system
-pti_est = PTIestimate(igrams; frameaxes=PTI.FourierAxes())
-@show typeof(pti_est)
+# Create PTIestimate for forward modeling: 500×800 pixels, 15 interferograms
+pti_forward = PTIestimate((500, 800), (15,); frameaxes=PTI.FourierAxes())
+@show typeof(pti_forward)
 
-# Examine the coordinate system
-@show pti_est.frameaxes
-coords = Iterators.product(pti_est.frameaxes...)
+# Check that no measured data is present
+@show PTI.hasdata(pti_forward)  # Should be false
+
+# Examine the coordinate system and structure
+@show pti_forward.frameaxes
+@show PTI.framesize(pti_forward)
+@show PTI.setsize(pti_forward)
+
+# Create coordinate iterator for later use
+coords = Iterators.product(pti_forward.frameaxes...)
 @show size(coords)
 
-# ## 2. Setting the Aperture Mask
+# ## 2. Setting Up the Forward Model
 #
-# The mask defines the valid region for phase analysis. Here we create a circular aperture in Fourier space.
+# We now configure the PTIestimate structure with the parameters needed for forward modeling.
 
-
-# Set circular mask in Fourier space
+# Set circular aperture mask in Fourier space
 r = 0.45
-PTI.setmask!(pti_est, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
+PTI.setmask!(pti_forward, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
 
-# Visualize the mask across all frames
-plot_heatmaps_table(eachslice(PTI.mask(pti_est); dims=3); aspect=AxisAspect(1))
-
-# ## 3. Understanding the Forward Model
+# ## 3. Initial State: Understanding the Default Parameters
 #
-# Initially, the phase is zero, so all interferograms are identical to the background.
+# Let's examine what the PTIestimate structure contains initially and understand the forward model.
 
-# Display initial interferograms (all identical to background)
+# Initially, all parameters are at default values
+# Visualize the aperture mask, initial phase, and background together
 plot_heatmaps_table(
-    eachslice(PTI.getigrams(pti_est); dims=3); colormap=coligram, aspect=AxisAspect(1)
+    [
+        PTI.mask(pti_forward)[:, :, 1],
+        PTI.getphase(pti_forward),
+        PTI.background(pti_forward)[:, :, 1],
+    ];
+    ncols=3,
+    aspect=AxisAspect(1),
+    titles=["Aperture Mask", "Initial Phase", "Initial Background"],
+)
+
+# Display initial interferograms (all identical due to zero phase and tilts)
+plot_heatmaps_table(
+    eachslice(PTI.getigrams(pti_forward); dims=3)[1:4];
+    colormap=coligram,
+    aspect=AxisAspect(1),
+    titles=["Frame $i" for i in 1:4],
 )
 
 # Show the initial (zero) phase
-showphase(PTI.getphase(pti_est))[1]
+showphase(PTI.getphase(pti_forward))[1]
 
 # ## 4. Setting a Complex Phase Pattern
 #
-# We create a phase composed of astigmatism and coma terms to demonstrate realistic wavefront aberrations.
+# Now we'll set a realistic complex phase pattern using Zernike polynomials with Born & Wolf ordering.
 
-# Create a complex phase pattern: astigmatism + coma
-complex_phase = 4π * map(x -> -prod(x) / r + 3x[1]^2 * x[2] - x[2]^3, coords) ./ r^3
-PTI.setphase!(pti_est, complex_phase);
+phase_pattern = map(coords) do x
+    ## Extract coordinates
+    x_coord, y_coord = x[1] / r, x[2] / r
 
-# Display the phase pattern
-showphase(PTI.getphase(pti_est))[1]
+    ## Define Zernike coefficients (Born & Wolf ordering, j=1 to 15)
+    coefn = [
+        0.0,                      # j=1: Piston
+        0.04487997792421934,      # j=2: x-tilt
+        -0.061213166549227316,    # j=3: y-tilt
+        0.0372359177320852,       # j=4: 0° Primary astigmatism
+        -0.025807672973317094,    # j=5: Defocus
+        -0.10907698627242028,     # j=6: 45° Primary astigmatism
+        -0.0025831843312457176,   # j=7: trefoil 1
+        -1.2854500898834675,      # j=8: Primary x-coma
+        0.5100406297505503,       # j=9: Primary y-coma
+        -0.02063276561330821,     # j=10: trefoil 2
+        -0.14316991684722485,     # j=11:
+        -0.025345357367834,       # j=12: 0° Secondary astigmatism
+        0.1393506816540738,       # j=13:  spherical aberration
+        -0.19999956756592352,     # j=14: 45° Secondary astigmatism
+        0.13278232836541945,       # j=15:
+    ]
 
-# Show how interferograms change with the new phase
+    ## Calculate polynomial value using weighted Zernike polynomials (compact Cartesian form)
+    phase_val =
+        coefn[1] * 1 +
+        coefn[2] * x_coord +
+        coefn[3] * y_coord +
+        coefn[4] * (x_coord^2 - y_coord^2) +
+        coefn[5] * (2 * (x_coord^2 + y_coord^2) - 1) +
+        coefn[6] * (2 * x_coord * y_coord) +
+        coefn[7] * (x_coord^3 - 3 * x_coord * y_coord^2) +
+        coefn[8] * (3 * x_coord * (x_coord^2 + y_coord^2) - 2 * x_coord) +
+        coefn[9] * (3 * y_coord * (x_coord^2 + y_coord^2) - 2 * y_coord) +
+        coefn[10] * (3 * x_coord^2 * y_coord - y_coord^3) +
+        coefn[11] * (x_coord^4 - 6 * x_coord^2 * y_coord^2 + y_coord^4) +
+        coefn[12] * (
+            4 * (x_coord^2 + y_coord^2) * (x_coord^2 - y_coord^2) -
+            3 * (x_coord^2 - y_coord^2)
+        ) +
+        coefn[13] * (6 * (x_coord^2 + y_coord^2)^2 - 6 * (x_coord^2 + y_coord^2) + 1) +
+        coefn[14] *
+        (8 * x_coord * y_coord * (x_coord^2 + y_coord^2) - 6 * x_coord * y_coord) +
+        coefn[15] * (4 * x_coord^3 * y_coord - 4 * x_coord * y_coord^3)
+
+    return phase_val
+end
+
+# Generate the Zernike phase pattern
+
+PTI.setphase!(pti_forward, 10π * phase_pattern);
+showphase(PTI.getphase(pti_forward))[1]
+
+# Display the phase pattern and show interferograms with new phase (still identical due to zero tilts)
 plot_heatmaps_table(
-    eachslice(PTI.getigrams(pti_est); dims=3); colormap=coligram, aspect=AxisAspect(1)
+    eachslice(PTI.getigrams(pti_forward); dims=3)[1:4];
+    colormap=coligram,
+    aspect=AxisAspect(1),
+    titles=["Frame 1", "Frame 2", "Frame 3", "Frame 4"],
 )
 
-# ## 5. Adding Random Tilts
+# ## 5. Adding Tilts: Creating Interferogram Diversity
 #
-# Tilts represent linear phase ramps that are different for each interferogram. This simulates realistic experimental conditions.
+# Tilts create the diversity between interferograms that makes PTI analysis possible.
 
 # Add random tilts to each interferogram
-PTI.settilts!(pti_est, PTI.FreeTilt.([6π * (randn(3) .- 0.5) for _ in PTI.tilts(pti_est)]));
+PTI.settilts!(
+    pti_forward, PTI.FreeTilt.([10π * (randn(3) .- 0.5) for _ in PTI.tilts(pti_forward)])
+);
 
-# Display interferograms with tilts applied
+# Now interferograms show clear differences due to tilts
 plot_heatmaps_table(
-    eachslice(PTI.getigrams(pti_est); dims=3); colormap=coligram, aspect=AxisAspect(1)
+    eachslice(PTI.getigrams(pti_forward); dims=3);
+    colormap=coligram,
+    aspect=AxisAspect(1),
+    titles=["Frame $i" for i in 1:15],
 )
 
-# Update tilts to demonstrate variability
-PTI.settilts!(pti_est, PTI.FreeTilt.([10π * (randn(3) .- 0.5) for _ in PTI.tilts(pti_est)]))
+# Update tilts to demonstrate different tilt patterns
+PTI.settilts!(
+    pti_forward, PTI.FreeTilt.([10π * (randn(3) .- 0.5) for _ in PTI.tilts(pti_forward)])
+)
 plot_heatmaps_table(
-    eachslice(PTI.getigrams(pti_est); dims=3); colormap=coligram, aspect=AxisAspect(1)
-) |> display
+    eachslice(PTI.getigrams(pti_forward); dims=3);
+    colormap=coligram,
+    aspect=AxisAspect(1),
+    titles=["Frame $i" for i in 1:15],
+)
 
-print("Tilts: ", pti_est.tilts)
+print("Some current tilts: ", pti_forward.tilts[1, 1, 1:3])
 
-# ## 6. Analyzing Interferogram Differences
+# ## 6. Forward Model Applications
 #
-# Interferogram differences are crucial for tilt estimation. We examine the structure of these differences.
+# The forward model can be used for various analysis tasks.
 
-# Extract interferograms for analysis
-igrams_analysis = PTI.getigrams(pti_est);
+# Extract the synthetic interferograms for further analysis
+synthetic_igrams = PTI.getigrams(pti_forward);
 
-# Helper function for plotting heatmap tables
+# Helper function for plotting
 pht(arr; kwargs...) =
     plot_heatmaps_table(eachslice(arr; dims=3); aspect=AxisAspect(1), kwargs...)
 
-# Display the interferograms
-pht(igrams_analysis; colormap=:grays)
+# Analyze interferogram differences (important for tilt estimation)
+deltas = diff(synthetic_igrams; dims=3)
+pht(deltas; colormap=coligramdiff, titles=["Δ$i" for i in 1:size(deltas, 3)])
 
-# Compute and display interferogram differences
-deltas = diff(igrams_analysis; dims=3)
-pht(deltas; colormap=coligramdiff)
-
-# ## 7. Background Estimation
+# ## 7. Understanding the Physical Model
 #
-# The background can be estimated by averaging all interferograms, assuming random tilts.
+# Each interferogram follows the model: I = background + Re(complex_amplitude × exp(i×tilt))
 
-# Simple average for background estimation
-aest = sum(igrams_analysis; dims=3) / prod(PTI.setsize(pti_est))
-pht(aest; colormap=:grays)
+# Examine different components
+@show size(PTI.background(pti_forward))
+@show size(PTI.complexamplitude(pti_forward))
+@show size(PTI.tilts(pti_forward))
 
-# Improved background estimation with Gaussian filtering
-aestf = [imfilter(aest[:, :, 1], Kernel.gaussian(s)) for s in 1:16]
-plot_heatmaps_table(
-    aestf; colormap=:grays, titles=["σ = $s" for s in 1:16], aspect=AxisAspect(1)
-)
+# Store our forward model results for later comparison
+ground_truth_phase = PTI.getphase(pti_forward)
+ground_truth_tilts = deepcopy(PTI.tilts(pti_forward))
+ground_truth_igrams = copy(synthetic_igrams);
 
-# ## 8. Working with Diversed Complex Amplitudes
+# # Part II: Inverse Problems with PTIestimate
 #
-# The diversed complex amplitude represents how the complex amplitude appears under specific tilt conditions.
+# Now we'll demonstrate how to use PTIestimate for inverse problems - estimating parameters from measured data.
 
-# Get complex amplitude with no tilt components
-ttt = PTI.get_diversed_complex_amplitude(pti_est, (0,))
-pht(real.(ttt); colormap=coligram)
-
-# Get complex amplitude with x and y tilt components
-ttt = PTI.get_diversed_complex_amplitude(pti_est, (1, 2))
-pht(real.(ttt); colormap=coligram)
-
-# ## 9. Phase Reconstruction from Individual Interferograms
+# ## 8. Creating PTIestimate from Measured Data
 #
-# This section demonstrates how to reconstruct phase information from individual interferograms using linear algebra.
+# We'll use our synthetic data as "measured" interferograms to test the inverse algorithms.
 
-# Set up linear system for the first interferogram
-A1 = [vec(ttt[:, :, 1]) conj.(vec(ttt[:, :, 1]))]
-b1 = vec(igrams_analysis[:, :, 1]) - vec(PTI.background(pti_est)[:, :, 1])
-d1 = A1 \ b1;
+# Create PTIestimate from interferogram data (simulating measured data)
+measured_data = eachslice(ground_truth_igrams; dims=3)
+pti_inverse = PTIestimate(measured_data; frameaxes=PTI.FourierAxes())
 
-# Compare estimated and ground truth phase offset
-estimated_sigma = angle(d1[1])
-ground_truth_sigma = PTI.sigma(pti_est.tilts[1])
+# Check that measured data is now stored in the structure
+@show PTI.hasdata(pti_inverse)  # Should be true
+@show size(PTI.data(pti_inverse))
 
-@show estimated_sigma
-@show ground_truth_sigma
-@show phwrap(estimated_sigma - ground_truth_sigma)  # Error should be small
+# The structure now contains both model parameters and measured data
+@show typeof(pti_inverse)
+@show PTI.framesize(pti_inverse)
+@show PTI.setsize(pti_inverse)
 
-# ## 10. Improved Reconstruction Using Mask
+# ## 9. Initial Parameter Estimation
 #
-# Limiting the reconstruction to valid pixels (within the mask) improves accuracy significantly.
+# The first step in inverse PTI is to obtain rough estimates of the tilts.
 
-# Use only masked pixels for reconstruction
-ttt1 = ttt[:, :, 1][pti_est.mask]
-A1_masked = [ttt1 conj(ttt1)]
-b1_masked =
-    igrams_analysis[:, :, 1][pti_est.mask] - PTI.background(pti_est)[:, :, 1][pti_est.mask]
-d1_masked = A1_masked \ b1_masked;
+# Set the same aperture mask as used in forward modeling
+PTI.setmask!(pti_inverse, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
 
-# Check improved accuracy
-improved_sigma = angle(d1_masked[1])
-@show improved_sigma
-@show phwrap(improved_sigma - ground_truth_sigma)  # Error should be near machine precision
-
-# ## 11. PTI Workflow: Initialization and Iterative Refinement
-#
-# This section demonstrates the complete PTI workflow using the PTIestimate structure.
-
-# Create a new estimate for testing the workflow
-test_data = eachslice(igrams_analysis; dims=3)
-est = PTIestimate(test_data);
-
-# Initialize with rough tilt estimates
+# Initialize with rough tilt estimates using the new convenient API
 refframe = 2
-PTI.initialize!(est, test_data; refframe=refframe);
+PTI.initialize!(pti_inverse; refframe=refframe)  # Uses internal data automatically
 
 # Display initial tilt estimates
-@show est.tilts;
+@show pti_inverse.tilts[1, 1, 1:3]
 
-# Show interferograms after initialization
+# Show what the interferograms look like with initial estimates
 plot_heatmaps_table(
-    PTI.getigramssliced(est); colormap=coligram, title="After initialization"
+    PTI.getigramssliced(pti_inverse)[1:6];
+    colormap=coligram,
+    aspect=AxisAspect(1),
+    titles=["Initial Est. $i" for i in 1:6],
 )
 
-# Adjust tilt signs based on ground truth (this would normally be done using other methods)
-# For this tutorial, we'll use the ground truth to set proper signs for convergence demonstration
+# Adjust tilt signs for proper convergence (using ground truth for demonstration)
 normals = [
-    PTI.tau(t) - PTI.tau(pti_est.tilts[1, 1, refframe]) for t in pti_est.tilts[1, 1, :]
+    PTI.tau(t) - PTI.tau(ground_truth_tilts[1, 1, refframe]) for
+    t in ground_truth_tilts[1, 1, :]
 ]
-PTI.set_tilt_signs!(est, normals)
+PTI.set_tilt_signs!(pti_inverse, normals)
 
-# ## 12. Phase and Background Estimation
+# ## 10. Phase and Background Estimation
 #
-# Use phase-shifting interferometry to estimate phase and background.
+# Use phase-shifting interferometry to estimate phase and background from the current tilt estimates.
 
-# Apply least-squares PSI algorithm
+# Apply least-squares PSI algorithm using the convenient API
 psialg = PTI.LSPSI()
-coords_analysis = Iterators.product(est.frameaxes...)
-deltas_est = eachslice(PTI.apply.(est.tilts, coords_analysis); dims=PTI.setdims(est))
-PhaseBgAmp = psialg(test_data, deltas_est; full=true);
+coords_inv = Iterators.product(pti_inverse.frameaxes...)
+deltas_est = eachslice(
+    PTI.apply.(pti_inverse.tilts, coords_inv); dims=PTI.setdims(pti_inverse)
+)
+PhaseBgAmp = psialg(eachslice(PTI.data(pti_inverse); dims=3), deltas_est; full=true);
 
-# Display results
+# Display initial estimation results
 fig = Figure(; size=(1200, 400))
 fig[1, 1] = Axis(fig; title="Estimated Phase")
 fig[1, 2] = Axis(fig; title="Estimated Background")
@@ -223,29 +280,24 @@ showarray!(fig[1, 3], abs.(PhaseBgAmp[2]))
 fig
 
 # Update the estimate with new values
-PTI.setcomplexamplitude!(est, PhaseBgAmp[2])
-PTI.setbackground!(est, PhaseBgAmp[3]);
+PTI.setcomplexamplitude!(pti_inverse, PhaseBgAmp[2])
+PTI.setbackground!(pti_inverse, PhaseBgAmp[3]);
 
-# ## 13. Iterative Refinement
+# ## 11. Iterative Refinement
 #
-# Demonstrate the iterative refinement process that alternates between phase/background estimation and tilt refinement.
+# The key to accurate PTI analysis is iterative refinement of both phase/background and tilts.
 
-# Exact tilt estimation functions from the original PTIestimate_test.jl
+# Exact tilt estimation functions (from PTIestimate_test.jl)
 function get_taux(qqq, n)
     ## n is the index of the tilt
-    ## we fix first coordinate of the frame, and compose the matrix of the system of equations by iterating by the second coordinate
     A1 = zeros(ComplexF64, PTI.framesize(qqq)[2], 2)
     b1 = zeros(ComplexF64, PTI.framesize(qqq)[2])
     alltau = [get_taux(qqq, n, mx, A1, b1) for mx in 1:PTI.framesize(qqq)[1]]
-    ## function gettau(qqq, n, mx) returns the x tau component of the tilt n at the point mx or NaN if the tilt is not defined at the point
-    ## Now we extract the slope taux from alltau
     t1est = phwrap(diff(alltau[(!isnan).(alltau)]))
     return mean(t1est) / step(qqq.frameaxes[1])
 end
 
 function get_taux(qqq, n, mx, A1, b1)
-    ## n is the index of the tilt
-    ## mx is the index of the point in the first coordinate of the frame
     igrams = PTI.getigrams(qqq)
     for my in 1:PTI.framesize(qqq)[2]
         A1[my, 1] = PTI.complexamplitude(qqq)[mx, my] * qqq.mask[mx, my]
@@ -261,20 +313,14 @@ function get_taux(qqq, n, mx, A1, b1)
 end
 
 function get_tauy(qqq, n)
-    ## n is the index of the tilt
-    ## we fix second coordinate of the frame, and compose the matrix of the system of equations by iterating by the first coordinate
     A1 = zeros(ComplexF64, PTI.framesize(qqq)[1], 2)
     b1 = zeros(ComplexF64, PTI.framesize(qqq)[1])
     alltau = [get_tauy(qqq, n, my, A1, b1) for my in 1:PTI.framesize(qqq)[2]]
-    ## function gettau(qqq, n, mx) returns the x tau component of the tilt n at the point mx or NaN if the tilt is not defined at the point
-    ## Now we extract the slope taux from alltau
     t1est = phwrap(diff(alltau[(!isnan).(alltau)]))
     return mean(t1est) / step(qqq.frameaxes[2])
 end
 
 function get_tauy(qqq, n, my, A1, b1)
-    ## n is the index of the tilt
-    ## my is the index of the point in the second coordinate of the frame
     igrams = PTI.getigrams(qqq)
     for mx in 1:PTI.framesize(qqq)[1]
         A1[mx, 1] = PTI.complexamplitude(qqq)[mx, my] * qqq.mask[mx, my]
@@ -290,16 +336,12 @@ function get_tauy(qqq, n, my, A1, b1)
 end
 
 function get_sigma(qqq, n)
-    ## n is the index of the tilt
-    ## we fix first coordinate of the frame, and compose the matrix of the system of equations by iterating by the second coordinate
     A1 = zeros(ComplexF64, prod(PTI.framesize(qqq)), 2)
     b1 = zeros(ComplexF64, prod(PTI.framesize(qqq)))
     return get_sigma(qqq, n, A1, b1)
 end
 
 function get_sigma(qqq, n, A1, b1)
-    ## n is the index of the tilt
-    ## mx is the index of the point in the first coordinate of the frame
     coords = Iterators.product(qqq.frameaxes...)
     igrams = PTI.getigrams(qqq)
     for (i, x) in enumerate(coords)
@@ -316,60 +358,68 @@ function get_sigma(qqq, n, A1, b1)
     end
 end
 
-# Perform iterations of refinement using exact tilt estimation
+# Perform iterative refinement
 for k in 1:10
     @info "Iteration $k"
 
     ## Phase and background estimation
-    deltas_est = eachslice(PTI.apply.(est.tilts, coords_analysis); dims=PTI.setdims(est))
-    PhaseBgAmp = psialg(test_data, deltas_est; full=true)
+    deltas_est = eachslice(
+        PTI.apply.(pti_inverse.tilts, coords_inv); dims=PTI.setdims(pti_inverse)
+    )
+    PhaseBgAmp = psialg(PTI.data(pti_inverse), deltas_est; full=true)
 
     ## Update estimates
-    PTI.setcomplexamplitude!(est, PhaseBgAmp[2])
-    PTI.setbackground!(est, PhaseBgAmp[3])
+    PTI.setcomplexamplitude!(pti_inverse, PhaseBgAmp[2])
+    PTI.setbackground!(pti_inverse, PhaseBgAmp[3])
 
-    ## Exact tilt refinement using the functions from PTIestimate_test.jl
-    all_taux = [get_taux(est, tiltind) for tiltind in est.setaxes[1]]
-    all_tauy = [get_tauy(est, tiltind) for tiltind in est.setaxes[1]]
-    all_sigma = [get_sigma(est, tiltind) for tiltind in est.setaxes[1]]
+    ## Exact tilt refinement
+    all_taux = [get_taux(pti_inverse, tiltind) for tiltind in pti_inverse.setaxes[1]]
+    all_tauy = [get_tauy(pti_inverse, tiltind) for tiltind in pti_inverse.setaxes[1]]
+    all_sigma = [get_sigma(pti_inverse, tiltind) for tiltind in pti_inverse.setaxes[1]]
 
     ## Update tilts
     newtilts = reshape(
-        [PTI.FreeTilt([c]) for c in zip(all_sigma, all_taux, all_tauy)], size(est.tilts)
+        [PTI.FreeTilt([c]) for c in zip(all_sigma, all_taux, all_tauy)],
+        size(pti_inverse.tilts),
     )
-    est.tilts .= newtilts
+    pti_inverse.tilts .= newtilts
 
-    ## Display progress
-    if k <= 2  # Show first two iterations
+    ## Display progress for first few iterations
+    if k <= 2
         plot_heatmaps_table(
-            PTI.getigramssliced(est); colormap=coligram, title="Iteration $k"
-        ) |> display
+            PTI.getigramssliced(pti_inverse)[1:4];
+            colormap=coligram,
+            aspect=AxisAspect(1),
+            titles=["Iter $k: Frame $i" for i in 1:4],
+        )
     end
 end
 
-# ## 14. Final Results and Convergence Analysis
+# ## 12. Validation Against Ground Truth
 #
-# Display the final estimated phase and compare with the ground truth.
+# Now we can compare our estimated parameters with the known ground truth from the forward model.
 
-## Extract final phase estimate
-final_phase = PTI.getphase(est)
+# Extract final estimated parameters
+final_estimated_phase = PTI.getphase(pti_inverse)
 
-## Display final results
-fig = Figure(; size=(800, 400))
-fig[1, 1] = Axis(fig; title="Final Phase Estimate")
+# Compare phases
+fig = Figure(; size=(1200, 400))
+fig[1, 1] = Axis(fig; title="Estimated Phase")
 fig[1, 2] = Axis(fig; title="Ground Truth Phase")
-showphase!(fig[1, 1], final_phase)
-showphase!(fig[1, 2], PTI.getphase(pti_est))
+fig[1, 3] = Axis(fig; title="Phase Difference")
+showphase!(fig[1, 1], final_estimated_phase)
+showphase!(fig[1, 2], ground_truth_phase)
+showphase!(fig[1, 3], phwrap.(final_estimated_phase - ground_truth_phase))
 fig
 
 # Compare tilt estimation accuracy
-gt_taux = [PTI.tau(tilt)[1] for tilt in PTI.tilts(pti_est)[1, 1, :]]
-gt_tauy = [PTI.tau(tilt)[2] for tilt in PTI.tilts(pti_est)[1, 1, :]]
-gt_sigma = [PTI.sigma(tilt) for tilt in PTI.tilts(pti_est)[1, 1, :]]
+gt_taux = [PTI.tau(tilt)[1] for tilt in ground_truth_tilts[1, 1, :]]
+gt_tauy = [PTI.tau(tilt)[2] for tilt in ground_truth_tilts[1, 1, :]]
+gt_sigma = [PTI.sigma(tilt) for tilt in ground_truth_tilts[1, 1, :]]
 
-est_taux = [PTI.tau(tilt)[1] for tilt in est.tilts[1, 1, :]]
-est_tauy = [PTI.tau(tilt)[2] for tilt in est.tilts[1, 1, :]]
-est_sigma = [PTI.sigma(tilt) for tilt in est.tilts[1, 1, :]];
+est_taux = [PTI.tau(tilt)[1] for tilt in pti_inverse.tilts[1, 1, :]]
+est_tauy = [PTI.tau(tilt)[2] for tilt in pti_inverse.tilts[1, 1, :]]
+est_sigma = [PTI.sigma(tilt) for tilt in pti_inverse.tilts[1, 1, :]]
 
 # Display tilt estimation errors
 fig_tilts = Figure(; size=(1200, 300))
@@ -380,21 +430,63 @@ scatter(
 )
 fig_tilts
 
+# Print summary statistics
+println(
+    "Phase reconstruction RMS error: ",
+    sqrt(mean((phwrap.(final_estimated_phase - ground_truth_phase)) .^ 2)),
+)
+println("Tilt τₓ RMS error: ", sqrt(mean((est_taux - gt_taux) .^ 2)))
+println("Tilt τᵧ RMS error: ", sqrt(mean((est_tauy - gt_tauy) .^ 2)))
+println("Tilt σ RMS error: ", sqrt(mean((phwrap.(est_sigma - gt_sigma)) .^ 2)))
+
+# # Part III: Key Features and API Summary
+
+# ## 13. PTIestimate API Summary
+#
+# The tutorial has demonstrated the two primary usage patterns:
+
+# **Forward Modeling (no measured data):**
+# ```julia
+# pti = PTIestimate((nx, ny), (nframes,))  # hasdata(pti) == false
+# PTI.setphase!(pti, phase_pattern)
+# PTI.settilts!(pti, tilt_array)
+# synthetic_data = PTI.getigrams(pti)
+# ```
+
+# **Inverse Problems (with measured data):**
+# ```julia
+# pti = PTIestimate(measured_interferograms)  # hasdata(pti) == true
+# PTI.initialize!(pti)  # Uses internal data
+# # Iterative refinement...
+# estimated_phase = PTI.getphase(pti)
+# ```
+
 # ## Conclusions
 #
-# This tutorial has demonstrated:
+# This tutorial has demonstrated the comprehensive capabilities of the PTIestimate structure:
 #
-# 1. **PTIestimate Construction**: How to create PTIestimate objects from interferogram data
-# 2. **Forward Modeling**: Using PTIestimate to generate synthetic interferograms with controlled phase and tilt patterns
-# 3. **Mask Application**: Setting up aperture masks for realistic experimental conditions
-# 4. **Phase Reconstruction**: Extracting phase information using both direct linear algebra and iterative algorithms
-# 5. **Iterative Refinement**: The alternating optimization approach for simultaneously estimating phase, background, and tilts
+# ### Forward Modeling Capabilities:
+# 1. **Parameter-based interferogram synthesis** from phase, tilts, and background
+# 2. **Ground truth generation** for algorithm development and testing
+# 3. **Physical model validation** and sensitivity analysis
 #
-# The PTIestimate structure provides a unified framework for PTI analysis that can handle both forward modeling for simulation and inverse problems for phase reconstruction from experimental data.
+# ### Inverse Problem Capabilities:
+# 4. **Automatic initialization** from measured interferogram data
+# 5. **Unified data management** with the optional data field
+# 6. **Iterative parameter estimation** with exact tilt refinement algorithms
+# 7. **Clean API design** with convenience methods for common operations
+#
+# ### Key Advantages:
+# - **Unified interface** for both forward and inverse problems
+# - **Data-aware design** distinguishing between modeling and measurement scenarios
+# - **Comprehensive state management** for iterative algorithms
+# - **Scientific accuracy** with exact mathematical implementations
+#
+# The PTIestimate structure provides a robust foundation for Phase-Tilted Interferometry analysis, supporting both educational exploration and research applications.
 #
 # ## Next Steps
 #
-# - Explore more sophisticated tilt estimation algorithms
-# - Apply the framework to real experimental data
-# - Investigate convergence properties of iterative algorithms
-# - Extend to more complex aperture geometries and phase patterns
+# - Apply the framework to real experimental interferogram data
+# - Explore advanced tilt estimation algorithms and convergence analysis
+# - Investigate performance with different noise levels and aperture geometries
+# - Extend to more complex phase patterns and multi-wavelength applications
