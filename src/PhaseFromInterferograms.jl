@@ -2,6 +2,18 @@ module PhaseFromInterferograms
 using FFTW
 using FFTViews
 using PhaseUtils: phwrap, dotproduct
+using PhaseUtils:
+    Tilt,
+    TiltCentered,
+    FreeTilt,
+    sigma,
+    tau,
+    setsigma!,
+    settau!,
+    setall!,
+    materialize,
+    apply
+using PhaseUtils: ArrayAxes, FourierAxes, DataAxes, DataAxesCentered
 using StatsBase
 
 # Overview of the exported symbols
@@ -30,4 +42,7 @@ export get_phase_from_igrams_with_tilts, get_tilt_dirs, get_phase_from_n_psi
 
 include("PTI_tensor.jl")
 export PTIestimate
+export Tilt,
+    TiltCentered, FreeTilt, sigma, tau, setsigma!, settau!, setall!, materialize, apply
+export ArrayAxes, FourierAxes, DataAxes, DataAxesCentered
 end

@@ -2,6 +2,7 @@ module PTI
 using StaticArrays
 using LinearAlgebra: dot
 using FFTW
+using PhaseUtils: TiltCentered, sigma, tau, setsigma!, settau!, setall!, materialize
 
 import Base.zero
 
@@ -52,21 +53,8 @@ materialize(p::PTIestimate) = [
 """
     TiltCentered
 
-
+Alias to PhaseUtils.TiltCentered for backward compatibility in PTI module.
 """
-struct TiltCentered{N}
-    coefs::MVector{N,Float64}
-end
-
-TiltCentered(coefs::AbstractVector) = TiltCentered(MVector(coefs...))
-
-sigma(t::TiltCentered) = t.coefs[1]
-tau(t::TiltCentered) = t.coefs[2:end]
-setsigma!(t::TiltCentered, s) = (t.coefs[1] = s)
-settau!(t::TiltCentered, τ) = (t.coefs[2:end] .= τ)
-setall!(t::TiltCentered, v) = (t.coefs .= v)
-materialize(t::TiltCentered, dims) =
-    [sigma(t) + dot(tau(t), x) for x in Iterators.product(fftshift.(fftfreq.(dims))...)]
 
 
 

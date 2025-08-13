@@ -1,7 +1,18 @@
 using StaticArrays
 using LinearAlgebra: dot
 using FFTW
-using PhaseUtils: diffirst
+using PhaseUtils:
+    Tilt,
+    TiltCentered,
+    FreeTilt,
+    sigma,
+    tau,
+    setsigma!,
+    settau!,
+    setall!,
+    materialize,
+    apply
+using PhaseUtils: ArrayAxes, FourierAxes, DataAxes, DataAxesCentered
 
 import Base.zero
 
@@ -159,6 +170,11 @@ function requiredata(p::PTIestimate)
         error("This operation requires measured data. Use setdata!(p, data) first.")
     return data(p)
 end
+function requiredatasliced(p::PTIestimate)
+    hasdata(p) ||
+        error("This operation requires measured data. Use setdata!(p, data) first.")
+    return eachslice(data(p); dims=1:(p.framesize))
+end
 
 getphase(p::PTIestimate) = reshape(angle.(complexamplitude(p)), framesize(p))
 getigrams(p::PTIestimate) = p.insync[1] ? p.igrams : materialize!(p).igrams
@@ -216,6 +232,7 @@ setdims(p::PTIestimate) = Tuple((i + p.framesize) for i in 1:(p.setsize))
 
 # Main functions
 function initialize!(p::PTIestimate, data, alg=FFTcrop1(); refframe=1)
+    data = eachslice(data; dims=3)
     for (i, igram) in pairs(IndexCartesian(), data)
         if i == CartesianIndex(refframe)
             tiltguess = FreeTilt([0.0, 0.0, 0.0])
@@ -230,9 +247,10 @@ function initialize!(p::PTIestimate, data, alg=FFTcrop1(); refframe=1)
     return p
 end
 
-# Convenience method that uses internal data
-initialize!(p::PTIestimate, alg=FFTcrop1(); refframe=1) =
-    initialize!(p, requiredata(p), alg; refframe=refframe)
+# Convenience method that uses internal data - more specific signature
+function initialize!(p::PTIestimate; refframe::Int=1)
+    return initialize!(p, requiredata(p), FFTcrop1(); refframe=refframe)
+end
 
 function set_tilt_signs!(p::PTIestimate, normals)
     for (tp, n) in zip(p.tilts, normals)
@@ -249,9 +267,10 @@ function update_background_amplitude!(p::PTIestimate, data, alg)
     return setcomplexamplitude!(p, c)
 end
 
-# Convenience method that uses internal data
-update_background_amplitude!(p::PTIestimate, alg) =
-    update_background_amplitude!(p, requiredata(p), alg)
+# Convenience method that uses internal data - more specific signature
+function update_background_amplitude!(p::PTIestimate)
+    return update_background_amplitude!(p, requiredata(p), LSPhaseAlg())
+end
 
 function update_tilts!(p::PTIestimate, igrams, alg)
     tiltguess = (alg)(igrams, background(p), complexamplitude(p), p.frameaxes)
@@ -260,59 +279,13 @@ function update_tilts!(p::PTIestimate, igrams, alg)
     end
 end
 
-# Convenience method that uses internal data
-update_tilts!(p::PTIestimate, alg) = update_tilts!(p, requiredata(p), alg)
-
-
-
-abstract type Tilt end
-
-
-sigma(t::Tilt) = t.coefs[1]
-tau(t::Tilt) = t.coefs[2:end]
-tau(t::Tilt, j) = t.coefs[1 + j]
-setsigma!(t::Tilt, s) = (t.coefs[1] = s)
-settau!(t::Tilt, τ) = (t.coefs[2:end] .= τ)
-setall!(t::Tilt, v) = (t.coefs .= v)
-materialize(t::Tilt, dims) =
-    [sigma(t) + dot(tau(t), x) for x in Iterators.product(fftshift.(fftfreq.(dims))...)]
-
-materialize(t::Tilt, axes::Vector{T} where {T<:AbstractVector}) =
-    [sigma(t) + dot(tau(t), x) for x in Iterators.product(axes...)]
-
-
-
-"""
-    TiltCentered
-
-
-"""
-struct TiltCentered{N} <: Tilt
-    coefs::MVector{N,Float64}
+# Convenience method that uses internal data - more specific signature
+function update_tilts!(p::PTIestimate)
+    return update_tilts!(p, requiredata(p), SymmetricLS())
 end
 
-TiltCentered(coefs::AbstractVector) = TiltCentered(MVector(coefs...))
-
-struct FreeTilt{N} <: Tilt
-    coefs::MVector{N,Float64}
-end
-
-FreeTilt(coefs::AbstractVector) = FreeTilt(MVector(coefs...))
-
-using LinearAlgebra: dot
-apply(t::Tilt, x) = sigma(t) + dot(tau(t), x)
-apply(t::Tilt, x, dims) = sum(t.coefs[i + 1] * get(x, i, 1) for i in dims)
 
 
-## Fourier transform coordinates
-abstract type ArrayAxes end
-struct FourierAxes <: ArrayAxes end
-struct DataAxes <: ArrayAxes end
-struct DataAxesCentered <: ArrayAxes end
-
-
-(alg::FourierAxes)(dims::NTuple) = [fftshift(fftfreq(d)) for d in dims]
-(alg::DataAxes)(dims::NTuple) = [1:d for d in dims]
-(alg::DataAxesCentered)(dims::NTuple) = [fftshift(fftfreq(d, d)) for d in dims]
+## Tilt and axes types now live in PhaseUtils; keep using them via imports above
 
 # end # module PTI
