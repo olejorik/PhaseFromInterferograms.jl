@@ -1,6 +1,5 @@
 module FindHarmonics
-# include("windowing.jl")
-using ..Windowing
+using PhaseUtils: GaussianWindow
 using FFTViews
 using FFTW
 using LinearAlgebra

@@ -1,7 +1,7 @@
 module PhaseFromInterferograms
 using FFTW
 using FFTViews
-using PhaseUtils: phwrap, dotproduct
+using PhaseUtils: phwrap, dotproduct, GaussianWindow
 using PhaseUtils:
     Tilt,
     TiltCentered,
@@ -20,9 +20,6 @@ using StatsBase
 include("utils.jl")
 export get_aperture
 
-
-include("Windowing.jl")
-using .Windowing
 export GaussianWindow
 
 include("FindHarmonics.jl")
