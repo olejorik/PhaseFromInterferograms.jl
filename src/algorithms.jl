@@ -252,6 +252,13 @@ get_side_lobe_freq(idiff, alg::SideLobeAlg) =
     erazesize::Int = 2
     window_scale::Float64 = 1 / 3
 end
+
+# just a demo of importance of the fftshift
+@kwdef struct FFTold <: SideLobeAlg
+    erazesize::Int = 2
+    window_scale::Float64 = 1 / 3
+end
+
 @kwdef struct FFTcrop2 <: SideLobeAlg
     erazesize::Int = 2
     window_scale::Float64 = 1 / 3
@@ -262,6 +269,15 @@ end
 end
 
 function get_side_lobe_freq(idiff, alg::FFTcrop1)
+    return FindHarmonics.findroughharmonic(
+        ifftshift(idiff);
+        window_scale=alg.window_scale,
+        erasesize=alg.erazesize,
+        halfplane="none",
+    )
+end
+
+function get_side_lobe_freq(idiff, alg::FFTold)
     return FindHarmonics.findroughharmonic(
         idiff; window_scale=alg.window_scale, erasesize=alg.erazesize, halfplane="none"
     )

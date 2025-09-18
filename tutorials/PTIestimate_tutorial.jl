@@ -2,7 +2,7 @@
 #
 # ## Introduction
 #
-# This tutorial demonstrates the use of the [`PTIestimate`](@ref) structure for Phase-Tilted Interferometry (PTI) analysis. The PTIestimate structure serves as a comprehensive framework that supports two primary use cases:
+# This tutorial demonstrates the use of the [`PTIestimate`](@ref) structure for Phase-Tilted Interferometry (PFI) analysis. The PTIestimate structure serves as a comprehensive framework that supports two primary use cases:
 #
 # 1. **Forward Modeling**: Generate synthetic interferograms from known phase and tilt parameters
 # 2. **Inverse Problems**: Estimate phase and tilts from measured interferogram data
@@ -10,7 +10,7 @@
 # The structure provides a unified interface for both scenarios, with the key distinction being whether measured data is provided or not.
 
 using PhaseFromInterferograms
-const PTI = PhaseFromInterferograms
+const PFI = PhaseFromInterferograms # to access not exported functions like PFI.background
 using Statistics
 using CairoMakie
 using PhasePlots
@@ -31,17 +31,18 @@ coligramdiff = :diverging_gwr_55_95_c38_n256;
 #
 # We start by creating a PTIestimate structure from dimensions only, without any measured data.
 
-# Create PTIestimate for forward modeling: 500×800 pixels, 15 interferograms
-pti_forward = PTIestimate((500, 800), (15,); frameaxes=PTI.FourierAxes())
+# Create PTIestimate for forward modeling: 500×800 pixels, 3x5 interferograms
+pti_forward = PTIestimate((500, 800), (3,5); frameaxes=PFI.FourierAxes())
 @show typeof(pti_forward)
 
 # Check that no measured data is present
-@show PTI.hasdata(pti_forward)  # Should be false
+@show PFI.hasdata(pti_forward)  # Should be false
 
 # Examine the coordinate system and structure
-@show pti_forward.frameaxes
-@show PTI.framesize(pti_forward)
-@show PTI.setsize(pti_forward)
+for (i, ax) in enumerate(pti_forward.frameaxes)  print("frame axis$i: $ax \n") end
+for (i, ax) in enumerate(pti_forward.setaxes)  print("set axis$i: $ax \n") end
+@show PFI.framesize(pti_forward)
+@show PFI.setsize(pti_forward)
 
 # Create coordinate iterator for later use
 coords = Iterators.product(pti_forward.frameaxes...)
@@ -53,7 +54,7 @@ coords = Iterators.product(pti_forward.frameaxes...)
 
 # Set circular aperture mask in Fourier space
 r = 0.45
-PTI.setmask!(pti_forward, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
+PFI.setmask!(pti_forward, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
 
 # ## 3. Initial State: Understanding the Default Parameters
 #
@@ -63,9 +64,9 @@ PTI.setmask!(pti_forward, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
 # Visualize the aperture mask, initial phase, and background together
 plot_heatmaps_table(
     [
-        PTI.mask(pti_forward)[:, :, 1],
-        PTI.getphase(pti_forward),
-        PTI.background(pti_forward)[:, :, 1],
+        PFI.mask(pti_forward)[:, :, 1],
+        PFI.getphase(pti_forward),
+        PFI.background(pti_forward)[:, :, 1],
     ];
     ncols=3,
     aspect=AxisAspect(1),
@@ -74,14 +75,14 @@ plot_heatmaps_table(
 
 # Display initial interferograms (all identical due to zero phase and tilts)
 plot_heatmaps_table(
-    eachslice(PTI.getigrams(pti_forward); dims=3)[1:4];
+    eachslice(PFI.getigrams(pti_forward); dims=3)[1:4];
     colormap=coligram,
     aspect=AxisAspect(1),
     titles=["Frame $i" for i in 1:4],
 )
 
 # Show the initial (zero) phase
-showphase(PTI.getphase(pti_forward))[1]
+showphase(PFI.getphase(pti_forward))[1]
 
 # ## 4. Setting a Complex Phase Pattern
 #
@@ -137,12 +138,12 @@ end
 
 # Generate the Zernike phase pattern
 
-PTI.setphase!(pti_forward, 10π * phase_pattern);
-showphase(PTI.getphase(pti_forward))[1]
+PFI.setphase!(pti_forward, 10π * phase_pattern);
+showphase(PFI.getphase(pti_forward))[1]
 
 # Display the phase pattern and show interferograms with new phase (still identical due to zero tilts)
 plot_heatmaps_table(
-    eachslice(PTI.getigrams(pti_forward); dims=3)[1:4];
+    eachslice(PFI.getigrams(pti_forward); dims=3)[1:4];
     colormap=coligram,
     aspect=AxisAspect(1),
     titles=["Frame 1", "Frame 2", "Frame 3", "Frame 4"],
@@ -150,27 +151,27 @@ plot_heatmaps_table(
 
 # ## 5. Adding Tilts: Creating Interferogram Diversity
 #
-# Tilts create the diversity between interferograms that makes PTI analysis possible.
+# Tilts create the diversity between interferograms that makes PFI analysis possible.
 
 # Add random tilts to each interferogram
-PTI.settilts!(
-    pti_forward, PTI.FreeTilt.([10π * (randn(3) .- 0.5) for _ in PTI.tilts(pti_forward)])
+PFI.settilts!(
+    pti_forward, PFI.FreeTilt.([10π * (randn(3) .- 0.5) for _ in PFI.tilts(pti_forward)])
 );
 
 # Now interferograms show clear differences due to tilts
 plot_heatmaps_table(
-    eachslice(PTI.getigrams(pti_forward); dims=3);
+    eachslice(PFI.getigrams(pti_forward); dims=3);
     colormap=coligram,
     aspect=AxisAspect(1),
     titles=["Frame $i" for i in 1:15],
 )
 
 # Update tilts to demonstrate different tilt patterns
-PTI.settilts!(
-    pti_forward, PTI.FreeTilt.([10π * (randn(3) .- 0.5) for _ in PTI.tilts(pti_forward)])
+PFI.settilts!(
+    pti_forward, PFI.FreeTilt.([10π * (randn(3) .- 0.5) for _ in PFI.tilts(pti_forward)])
 )
 plot_heatmaps_table(
-    eachslice(PTI.getigrams(pti_forward); dims=3);
+    eachslice(PFI.getigrams(pti_forward); dims=3);
     colormap=coligram,
     aspect=AxisAspect(1),
     titles=["Frame $i" for i in 1:15],
@@ -183,7 +184,7 @@ print("Some current tilts: ", pti_forward.tilts[1, 1, 1:3])
 # The forward model can be used for various analysis tasks.
 
 # Extract the synthetic interferograms for further analysis
-synthetic_igrams = PTI.getigrams(pti_forward);
+synthetic_igrams = PFI.getigrams(pti_forward);
 
 # Helper function for plotting
 pht(arr; kwargs...) =
@@ -198,13 +199,13 @@ pht(deltas; colormap=coligramdiff, titles=["Δ$i" for i in 1:size(deltas, 3)])
 # Each interferogram follows the model: I = background + Re(complex_amplitude × exp(i×tilt))
 
 # Examine different components
-@show size(PTI.background(pti_forward))
-@show size(PTI.complexamplitude(pti_forward))
-@show size(PTI.tilts(pti_forward))
+@show size(PFI.background(pti_forward))
+@show size(PFI.complexamplitude(pti_forward))
+@show size(PFI.tilts(pti_forward))
 
 # Store our forward model results for later comparison
-ground_truth_phase = PTI.getphase(pti_forward)
-ground_truth_tilts = deepcopy(PTI.tilts(pti_forward))
+ground_truth_phase = PFI.getphase(pti_forward)
+ground_truth_tilts = deepcopy(PFI.tilts(pti_forward))
 ground_truth_igrams = copy(synthetic_igrams);
 
 # # Part II: Inverse Problems with PTIestimate
@@ -217,34 +218,34 @@ ground_truth_igrams = copy(synthetic_igrams);
 
 # Create PTIestimate from interferogram data (simulating measured data)
 measured_data = eachslice(ground_truth_igrams; dims=3)
-pti_inverse = PTIestimate(measured_data; frameaxes=PTI.FourierAxes())
+pti_inverse = PTIestimate(measured_data; frameaxes=PFI.FourierAxes())
 
 # Check that measured data is now stored in the structure
-@show PTI.hasdata(pti_inverse)  # Should be true
-@show size(PTI.data(pti_inverse))
+@show PFI.hasdata(pti_inverse)  # Should be true
+@show size(PFI.data(pti_inverse))
 
 # The structure now contains both model parameters and measured data
 @show typeof(pti_inverse)
-@show PTI.framesize(pti_inverse)
-@show PTI.setsize(pti_inverse)
+@show PFI.framesize(pti_inverse)
+@show PFI.setsize(pti_inverse)
 
 # ## 9. Initial Parameter Estimation
 #
-# The first step in inverse PTI is to obtain rough estimates of the tilts.
+# The first step in inverse PFI is to obtain rough estimates of the tilts.
 
 # Set the same aperture mask as used in forward modeling
-PTI.setmask!(pti_inverse, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
+PFI.setmask!(pti_inverse, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
 
 # Initialize with rough tilt estimates using the new convenient API
 refframe = 2
-PTI.initialize!(pti_inverse; refframe=refframe)  # Uses internal data automatically
+PFI.initialize!(pti_inverse; refframe=refframe)  # Uses internal data automatically
 
 # Display initial tilt estimates
 @show pti_inverse.tilts[1, 1, 1:3]
 
 # Show what the interferograms look like with initial estimates
 plot_heatmaps_table(
-    PTI.getigramssliced(pti_inverse)[1:6];
+    PFI.getigramssliced(pti_inverse)[1:6];
     colormap=coligram,
     aspect=AxisAspect(1),
     titles=["Initial Est. $i" for i in 1:6],
@@ -252,22 +253,22 @@ plot_heatmaps_table(
 
 # Adjust tilt signs for proper convergence (using ground truth for demonstration)
 normals = [
-    PTI.tau(t) - PTI.tau(ground_truth_tilts[1, 1, refframe]) for
+    PFI.tau(t) - PFI.tau(ground_truth_tilts[1, 1, refframe]) for
     t in ground_truth_tilts[1, 1, :]
 ]
-PTI.set_tilt_signs!(pti_inverse, normals)
+PFI.set_tilt_signs!(pti_inverse, normals)
 
 # ## 10. Phase and Background Estimation
 #
 # Use phase-shifting interferometry to estimate phase and background from the current tilt estimates.
 
 # Apply least-squares PSI algorithm using the convenient API
-psialg = PTI.LSPSI()
+psialg = PFI.LSPSI()
 coords_inv = Iterators.product(pti_inverse.frameaxes...)
 deltas_est = eachslice(
-    PTI.apply.(pti_inverse.tilts, coords_inv); dims=PTI.setdims(pti_inverse)
+    PFI.apply.(pti_inverse.tilts, coords_inv); dims=PFI.setdims(pti_inverse)
 )
-PhaseBgAmp = psialg(eachslice(PTI.data(pti_inverse); dims=3), deltas_est; full=true);
+PhaseBgAmp = psialg(eachslice(PFI.data(pti_inverse); dims=3), deltas_est; full=true);
 
 # Display initial estimation results
 fig = Figure(; size=(1200, 400))
@@ -280,29 +281,29 @@ showarray!(fig[1, 3], abs.(PhaseBgAmp[2]))
 fig
 
 # Update the estimate with new values
-PTI.setcomplexamplitude!(pti_inverse, PhaseBgAmp[2])
-PTI.setbackground!(pti_inverse, PhaseBgAmp[3]);
+PFI.setcomplexamplitude!(pti_inverse, PhaseBgAmp[2])
+PFI.setbackground!(pti_inverse, PhaseBgAmp[3]);
 
 # ## 11. Iterative Refinement
 #
-# The key to accurate PTI analysis is iterative refinement of both phase/background and tilts.
+# The key to accurate PFI analysis is iterative refinement of both phase/background and tilts.
 
 # Exact tilt estimation functions (from PTIestimate_test.jl)
 function get_taux(qqq, n)
     ## n is the index of the tilt
-    A1 = zeros(ComplexF64, PTI.framesize(qqq)[2], 2)
-    b1 = zeros(ComplexF64, PTI.framesize(qqq)[2])
-    alltau = [get_taux(qqq, n, mx, A1, b1) for mx in 1:PTI.framesize(qqq)[1]]
+    A1 = zeros(ComplexF64, PFI.framesize(qqq)[2], 2)
+    b1 = zeros(ComplexF64, PFI.framesize(qqq)[2])
+    alltau = [get_taux(qqq, n, mx, A1, b1) for mx in 1:PFI.framesize(qqq)[1]]
     t1est = phwrap(diff(alltau[(!isnan).(alltau)]))
     return mean(t1est) / step(qqq.frameaxes[1])
 end
 
 function get_taux(qqq, n, mx, A1, b1)
-    igrams = PTI.getigrams(qqq)
-    for my in 1:PTI.framesize(qqq)[2]
-        A1[my, 1] = PTI.complexamplitude(qqq)[mx, my] * qqq.mask[mx, my]
+    igrams = PFI.getigrams(qqq)
+    for my in 1:PFI.framesize(qqq)[2]
+        A1[my, 1] = PFI.complexamplitude(qqq)[mx, my] * qqq.mask[mx, my]
         A1[my, 2] = conj(A1[my, 1])
-        b1[my] = (igrams[mx, my, n] - PTI.background(qqq)[mx, my]) * qqq.mask[mx, my]
+        b1[my] = (igrams[mx, my, n] - PFI.background(qqq)[mx, my]) * qqq.mask[mx, my]
     end
     if sum(b1 .!= 0) > 2
         d1 = A1 \ b1
@@ -313,19 +314,19 @@ function get_taux(qqq, n, mx, A1, b1)
 end
 
 function get_tauy(qqq, n)
-    A1 = zeros(ComplexF64, PTI.framesize(qqq)[1], 2)
-    b1 = zeros(ComplexF64, PTI.framesize(qqq)[1])
-    alltau = [get_tauy(qqq, n, my, A1, b1) for my in 1:PTI.framesize(qqq)[2]]
+    A1 = zeros(ComplexF64, PFI.framesize(qqq)[1], 2)
+    b1 = zeros(ComplexF64, PFI.framesize(qqq)[1])
+    alltau = [get_tauy(qqq, n, my, A1, b1) for my in 1:PFI.framesize(qqq)[2]]
     t1est = phwrap(diff(alltau[(!isnan).(alltau)]))
     return mean(t1est) / step(qqq.frameaxes[2])
 end
 
 function get_tauy(qqq, n, my, A1, b1)
-    igrams = PTI.getigrams(qqq)
-    for mx in 1:PTI.framesize(qqq)[1]
-        A1[mx, 1] = PTI.complexamplitude(qqq)[mx, my] * qqq.mask[mx, my]
+    igrams = PFI.getigrams(qqq)
+    for mx in 1:PFI.framesize(qqq)[1]
+        A1[mx, 1] = PFI.complexamplitude(qqq)[mx, my] * qqq.mask[mx, my]
         A1[mx, 2] = conj(A1[mx, 1])
-        b1[mx] = (igrams[mx, my, n] - PTI.background(qqq)[mx, my]) * qqq.mask[mx, my]
+        b1[mx] = (igrams[mx, my, n] - PFI.background(qqq)[mx, my]) * qqq.mask[mx, my]
     end
     if sum(b1 .!= 0) > 2
         d1 = A1 \ b1
@@ -336,19 +337,19 @@ function get_tauy(qqq, n, my, A1, b1)
 end
 
 function get_sigma(qqq, n)
-    A1 = zeros(ComplexF64, prod(PTI.framesize(qqq)), 2)
-    b1 = zeros(ComplexF64, prod(PTI.framesize(qqq)))
+    A1 = zeros(ComplexF64, prod(PFI.framesize(qqq)), 2)
+    b1 = zeros(ComplexF64, prod(PFI.framesize(qqq)))
     return get_sigma(qqq, n, A1, b1)
 end
 
 function get_sigma(qqq, n, A1, b1)
     coords = Iterators.product(qqq.frameaxes...)
-    igrams = PTI.getigrams(qqq)
+    igrams = PFI.getigrams(qqq)
     for (i, x) in enumerate(coords)
-        A1[i, 1] = PTI.complexamplitude(qqq)[i] * qqq.mask[i]
+        A1[i, 1] = PFI.complexamplitude(qqq)[i] * qqq.mask[i]
         A1[i, 2] = conj(A1[i, 1])
         b1[i] =
-            (igrams[i + (n - 1) * length(coords)] - PTI.background(qqq)[i]) * qqq.mask[i]
+            (igrams[i + (n - 1) * length(coords)] - PFI.background(qqq)[i]) * qqq.mask[i]
     end
     if sum(b1 .!= 0) > 2
         d1 = A1 \ b1
@@ -364,13 +365,13 @@ for k in 1:10
 
     ## Phase and background estimation
     deltas_est = eachslice(
-        PTI.apply.(pti_inverse.tilts, coords_inv); dims=PTI.setdims(pti_inverse)
+        PFI.apply.(pti_inverse.tilts, coords_inv); dims=PFI.setdims(pti_inverse)
     )
-    PhaseBgAmp = psialg(PTI.data(pti_inverse), deltas_est; full=true)
+    PhaseBgAmp = psialg(PFI.data(pti_inverse), deltas_est; full=true)
 
     ## Update estimates
-    PTI.setcomplexamplitude!(pti_inverse, PhaseBgAmp[2])
-    PTI.setbackground!(pti_inverse, PhaseBgAmp[3])
+    PFI.setcomplexamplitude!(pti_inverse, PhaseBgAmp[2])
+    PFI.setbackground!(pti_inverse, PhaseBgAmp[3])
 
     ## Exact tilt refinement
     all_taux = [get_taux(pti_inverse, tiltind) for tiltind in pti_inverse.setaxes[1]]
@@ -379,7 +380,7 @@ for k in 1:10
 
     ## Update tilts
     newtilts = reshape(
-        [PTI.FreeTilt([c]) for c in zip(all_sigma, all_taux, all_tauy)],
+        [PFI.FreeTilt([c]) for c in zip(all_sigma, all_taux, all_tauy)],
         size(pti_inverse.tilts),
     )
     pti_inverse.tilts .= newtilts
@@ -387,7 +388,7 @@ for k in 1:10
     ## Display progress for first few iterations
     if k <= 2
         plot_heatmaps_table(
-            PTI.getigramssliced(pti_inverse)[1:4];
+            PFI.getigramssliced(pti_inverse)[1:4];
             colormap=coligram,
             aspect=AxisAspect(1),
             titles=["Iter $k: Frame $i" for i in 1:4],
@@ -400,7 +401,7 @@ end
 # Now we can compare our estimated parameters with the known ground truth from the forward model.
 
 # Extract final estimated parameters
-final_estimated_phase = PTI.getphase(pti_inverse)
+final_estimated_phase = PFI.getphase(pti_inverse)
 
 # Compare phases
 fig = Figure(; size=(1200, 400))
@@ -413,13 +414,13 @@ showphase!(fig[1, 3], phwrap.(final_estimated_phase - ground_truth_phase))
 fig
 
 # Compare tilt estimation accuracy
-gt_taux = [PTI.tau(tilt)[1] for tilt in ground_truth_tilts[1, 1, :]]
-gt_tauy = [PTI.tau(tilt)[2] for tilt in ground_truth_tilts[1, 1, :]]
-gt_sigma = [PTI.sigma(tilt) for tilt in ground_truth_tilts[1, 1, :]]
+gt_taux = [PFI.tau(tilt)[1] for tilt in ground_truth_tilts[1, 1, :]]
+gt_tauy = [PFI.tau(tilt)[2] for tilt in ground_truth_tilts[1, 1, :]]
+gt_sigma = [PFI.sigma(tilt) for tilt in ground_truth_tilts[1, 1, :]]
 
-est_taux = [PTI.tau(tilt)[1] for tilt in pti_inverse.tilts[1, 1, :]]
-est_tauy = [PTI.tau(tilt)[2] for tilt in pti_inverse.tilts[1, 1, :]]
-est_sigma = [PTI.sigma(tilt) for tilt in pti_inverse.tilts[1, 1, :]]
+est_taux = [PFI.tau(tilt)[1] for tilt in pti_inverse.tilts[1, 1, :]]
+est_tauy = [PFI.tau(tilt)[2] for tilt in pti_inverse.tilts[1, 1, :]]
+est_sigma = [PFI.sigma(tilt) for tilt in pti_inverse.tilts[1, 1, :]]
 
 # Display tilt estimation errors
 fig_tilts = Figure(; size=(1200, 300))
@@ -448,17 +449,17 @@ println("Tilt σ RMS error: ", sqrt(mean((phwrap.(est_sigma - gt_sigma)) .^ 2)))
 # **Forward Modeling (no measured data):**
 # ```julia
 # pti = PTIestimate((nx, ny), (nframes,))  # hasdata(pti) == false
-# PTI.setphase!(pti, phase_pattern)
-# PTI.settilts!(pti, tilt_array)
-# synthetic_data = PTI.getigrams(pti)
+# PFI.setphase!(pti, phase_pattern)
+# PFI.settilts!(pti, tilt_array)
+# synthetic_data = PFI.getigrams(pti)
 # ```
 
 # **Inverse Problems (with measured data):**
 # ```julia
 # pti = PTIestimate(measured_interferograms)  # hasdata(pti) == true
-# PTI.initialize!(pti)  # Uses internal data
+# PFI.initialize!(pti)  # Uses internal data
 # # Iterative refinement...
-# estimated_phase = PTI.getphase(pti)
+# estimated_phase = PFI.getphase(pti)
 # ```
 
 # ## Conclusions

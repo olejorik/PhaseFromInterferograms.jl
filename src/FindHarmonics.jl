@@ -32,9 +32,51 @@ function findfirstharmonic(array, params)
 end
 
 """
-    findroughharmonic(array, params)
+    findroughharmonic(array; window_scale=1/3, erasesize=3, halfplane="vertical")
 
-Document this function
+Find the rough position and frequency of the first harmonic in interferometric data.
+
+This function performs a coarse search for the dominant spatial frequency component
+in an interferogram by analyzing its Fourier spectrum. It's typically used as the
+first step in extracting phase information from interference patterns.
+
+# Arguments
+- `array`: Input interferogram data (2D or N-D array)
+- `window_scale=1/3`: Scale factor for the Gaussian window size relative to array dimensions.
+  Smaller values create sharper windows with better frequency localization.
+- `erasesize=3`: Half-width of the region around DC frequency to zero out (removes
+  background illumination effects)
+- `halfplane="vertical"`: Constraint on the search direction:
+  - `"vertical"`: Force frequency to have positive component in first dimension
+  - `"horisontal"`: Force frequency to have positive component in second dimension
+  - `"none"`: No directional constraint
+
+# Returns
+A tuple `(posmax, rough_freq, complex_amplitude)` where:
+- `posmax`: CartesianIndex of the peak position in the FFT spectrum
+- `rough_freq`: Vector of spatial frequencies [fx, fy, ...] in cycles per pixel
+- `complex_amplitude`: Complex amplitude of the harmonic (normalized by window sum)
+
+# Algorithm
+1. Apply Gaussian windowing to reduce spectral leakage
+2. Compute FFT of windowed data
+3. Remove DC component to avoid interference from background illumination
+4. Find the maximum peak in the magnitude spectrum
+5. Convert peak position to spatial frequency coordinates
+6. Apply halfplane constraint if specified to resolve directional ambiguity
+7. Extract and normalize the complex amplitude
+
+# Notes
+The halfplane constraint is useful when the fringe orientation is known a priori,
+helping to avoid sign ambiguity in the detected frequency. This is common in
+interferometric setups where the tilt direction is controlled.
+
+# Example
+```julia
+# Find rough harmonic in a 2D interferogram
+pos, freq, amp = findroughharmonic(interferogram; window_scale=0.25, halfplane="vertical")
+println("Detected frequency: ", freq, " cycles/pixel")
+```
 """
 function findroughharmonic(array; window_scale=1 / 3, erasesize=3, halfplane="vertical")
     if halfplane == "vertical"

@@ -12,6 +12,7 @@ using PhasePlots, PhaseUtils
 
 using FFTW, FFTViews
 using PhaseFromInterferograms
+import PhaseFromInterferograms as PFI # to get access to not exported function e.g. as PFI.background
 using PhaseFromInterferograms: fourier_tilt, getslopes
 using LaTeXStrings
 CairoMakie.activate!()

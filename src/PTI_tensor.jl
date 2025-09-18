@@ -26,16 +26,16 @@ Each interferogram Iₙ is modeled as:
 Iₙ = a + 2Re(c·dₙ) = a + c·dₙ + c̄·d̄ₙ
 where:
 - a is the background intensity (shared across all interferograms)
-- c is the complex amplitude (contains the phase to be estimated)
+- c is the complex amplitude (contains the intensity modulation and the phase to be estimated)
 - dₙ = exp(iδₙ) is the tilt factor for interferogram n
-- δₙ(x, y) = σₙ + τₙ¹ x + τₙ² y is a linear phase function
+- δₙ(x) = σₙ + τₙ ⋅ x  is a linear phase function, x is the spatial coordinate, and n is the interferogram index (may be also multi-dimensional)
 
 # Structure Fields
 - `framesize::Int`: Number of spatial dimensions
 - `setsize::Int`: Number of interferogram set dimensions
 - `fullsize::NTuple{M,Int}`: Complete dimensions (frame + set)
 - `background::Array{Float64,M}`: Background intensity component
-- `complexamplitude::Array{ComplexF64,M}`: Complex amplitude containing phase
+- `complexamplitude::Array{ComplexF64,M}`: Complex amplitude
 - `mask::BitArray{M}`: Binary mask for valid pixels (shared across interferograms)
 - `tilts::Array{TT,M}`: Array of tilt objects for each interferogram
 - `frameaxes::TFA`: Coordinate system for frame dimensions
@@ -43,6 +43,8 @@ where:
 - `igrams::Array{Float64,M}`: Forward model output (synthesized interferograms)
 - `data::Union{Nothing,Array{Float64,M}}`: Measured interferograms (optional)
 - `insync::Vector{Bool}`: Flag indicating if `igrams` is synchronized with current parameters
+
+If a value is common for all interferograms, like the background intensity, it is represented with an array which has size 1 for all dimensions of the set. This allows for efficient broadcasting and manipulation during the analysis.
 
 # Usage
 PTIestimate serves as:
@@ -177,17 +179,24 @@ function requiredatasliced(p::PTIestimate)
 end
 
 getphase(p::PTIestimate) = reshape(angle.(complexamplitude(p)), framesize(p))
+getapodization(p::PTIestimate) = reshape(abs.(complexamplitude(p)), framesize(p))
+getbackground(p::PTIestimate) = reshape(p.background, framesize(p))
 getigrams(p::PTIestimate) = p.insync[1] ? p.igrams : materialize!(p).igrams
 getigramssliced(p::PTIestimate) = eachslice(getigrams(p); dims=setdims(p))
-
+function gettilts(p::PTIestimate)
+    coords = Iterators.product(p.frameaxes...)
+    return apply.(p.tilts, coords)
+end
+gettiltssliced(p::PTIestimate) = eachslice(gettilts(p); dims=setdims(p))
 
 setbackground!(p::PTIestimate, b) = (p.insync .= false; p.background .= b)
 setcomplexamplitude!(p::PTIestimate, c) = (p.insync .= false; p.complexamplitude .= c)
 setmask!(p::PTIestimate, m) = (p.insync .= false; p.mask .= m)
-settilts!(p::PTIestimate, t) = (p.insync .= false; p.tilts .= t)
+settilts!(p::PTIestimate, t) = (p.insync .= false; p.tilts .= reshape(t, size(p.tilts)))
 setdata!(p::PTIestimate, d) = (p.data = copy(d))
 setphase!(p, φ) = (setcomplexamplitude!(p, abs.(complexamplitude(p)) .* cis.(φ)))
-
+setapodization!(p, a) =
+    (setcomplexamplitude!(p, complexamplitude(p) ./ abs.(complexamplitude(p)) .* a))
 
 function materialize!(p::PTIestimate)
     coords = Iterators.product(p.frameaxes...)
@@ -231,7 +240,23 @@ setdims(p::PTIestimate) = Tuple((i + p.framesize) for i in 1:(p.setsize))
 
 
 # Main functions
-function initialize!(p::PTIestimate, data, alg=FFTcrop1(); refframe=1)
+# function initialize!(p::PTIestimate, data, alg::FFTold; refframe=1)
+#     data = eachslice(data; dims=3)
+#     for (i, igram) in pairs(IndexCartesian(), data)
+#         if i == CartesianIndex(refframe)
+#             tiltguess = FreeTilt([0.0, 0.0, 0.0])
+#         else
+#             idiffsq = (igram - data[refframe]) .^ 2
+#             pos, freq, amp = get_side_lobe_freq(idiffsq, alg)
+#             tiltguess = FreeTilt([π - angle(amp), (2π * freq)...]) # it was -π - angle(amp); but I think now it's ±π
+#         end
+#         p.tilts[i] = tiltguess
+#     end
+#     p.insync .= false
+#     return p
+# end
+
+function initialize!(p::PTIestimate, data, alg::SideLobeAlg; refframe=1)
     data = eachslice(data; dims=3)
     for (i, igram) in pairs(IndexCartesian(), data)
         if i == CartesianIndex(refframe)
@@ -239,7 +264,7 @@ function initialize!(p::PTIestimate, data, alg=FFTcrop1(); refframe=1)
         else
             idiffsq = (igram - data[refframe]) .^ 2
             pos, freq, amp = get_side_lobe_freq(idiffsq, alg)
-            tiltguess = FreeTilt([-π - angle(amp), (2π * freq)...])
+            tiltguess = FreeTilt([angle(-amp), (2π * freq)...]) # it was -π - angle(amp); but I think now it's ±π
         end
         p.tilts[i] = tiltguess
     end
@@ -248,14 +273,15 @@ function initialize!(p::PTIestimate, data, alg=FFTcrop1(); refframe=1)
 end
 
 # Convenience method that uses internal data - more specific signature
-function initialize!(p::PTIestimate; refframe::Int=1)
-    return initialize!(p, requiredata(p), FFTcrop1(); refframe=refframe)
+function initialize!(p::PTIestimate, alg=FFTcrop1(); refframe::Int=1)
+    return initialize!(p, requiredata(p), alg; refframe=refframe)
 end
 
 function set_tilt_signs!(p::PTIestimate, normals)
     for (tp, n) in zip(p.tilts, normals)
         if dot(tau(tp), n) < 0
             tp.coefs .*= -1
+            # tp.coefs[1] += π
         end
     end
 end
