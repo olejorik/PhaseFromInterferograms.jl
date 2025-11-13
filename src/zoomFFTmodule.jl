@@ -168,7 +168,7 @@ function findfirstharmonic2(
 
 
 
-    signal = removeDC(a, erasesize)
+    signal = removeDC(ifftshift(a), erasesize)
     # signal = a
     spectrum = fft(signal)
 
@@ -218,11 +218,109 @@ function removeDC(a, erasesize=0)
     return ifft(spectrum)
 end  # function removeDC
 
+"""
+    findfirstharmonic2_v2(signal; zoomlevels=nothing, half_width=16, erasesize=2) -> (freqs, phase), amp_hist, freqs_hist
+
+Improved implementation to find the first harmonic in a 2D signal with subpixel precision.
+
+This version fixes issues in the original implementation:
+- Removes incorrect ifftshift on spatial domain signal
+- Uses proper frequency grid construction with fftshift(fftfreq(...))
+- Searches in a fixed-size window around the peak (not rescaled frequency grid)
+- Returns the complex amplitude directly for phase extraction
+- Properly excludes DC region for real non-negative signals
+
+# Arguments
+- `signal`: 2D array (real or complex) containing the signal
+- `zoomlevels`: Array of zoom factors to apply sequentially. If `nothing`, uses default progression.
+- `half_width`: Half-width of the search region around the peak (default: 16 samples)
+- `erasesize`: Size of region around DC to exclude (default: 2, sets 2*erasesize+1 region to zero)
+
+# Returns
+- Tuple of: ((frequencies, phase), amplitude_history, frequency_history)
+  - `frequencies`: Detected [f1, f2] frequency values
+  - `phase`: Phase at the peak frequency
+  - `amplitude_history`: Complex amplitudes at each zoom level
+  - `frequency_history`: Frequency estimates at each zoom level
+"""
+function findfirstharmonic2_v2(signal; zoomlevels=nothing, half_width=16, erasesize=5)
+    arrsize = size(signal)
+
+    ## Set default zoom levels if not provided
+    if isnothing(zoomlevels)
+        zoomlevels = [
+            1, 2, 4, 8, 16, minimum(arrsize) ÷ 4, minimum(arrsize) ÷ 2, minimum(arrsize)
+        ]
+    end
+
+    ## Remove DC component from signal (important for real non-negative signals)
+    ## This is more effective than just zeroing DC in frequency domain
+    signal_no_dc = if erasesize > 0
+        removeDC(signal, erasesize)
+    else
+        signal
+    end
+
+    ## Initial coarse frequency detection using standard FFT
+    spectrum = fft(signal_no_dc)
+    abs_spectrum = abs.(spectrum)
+
+    peak_idx = argmax(abs_spectrum)
+
+    ## Get initial frequency estimate
+    freqs_x = fftfreq(arrsize[1])
+    freqs_y = fftfreq(arrsize[2])
+    current_freq = [freqs_x[peak_idx[1]], freqs_y[peak_idx[2]]]
+
+    ## Storage for iteration history
+    freqs_hist = [copy(current_freq)]
+    amp_hist = [spectrum[peak_idx]]
+
+    ## Iteratively refine using zoom FFT
+    for zoom_factor in zoomlevels[2:end]  # Skip first level as we already did it
+        ## Create zoomed frequency grid centered on current estimate
+        padsize = zoom_factor .* arrsize
+        freqs_x_full = fftshift(fftfreq(padsize[1]))
+        freqs_y_full = fftshift(fftfreq(padsize[2]))
+
+        ## Find indices closest to current frequency estimate
+        idx_f1 = argmin(abs.(freqs_x_full .- current_freq[1]))
+        idx_f2 = argmin(abs.(freqs_y_full .- current_freq[2]))
+
+        ## Define search region around the current estimate
+        M_range = max(1, idx_f1 - half_width):min(padsize[1], idx_f1 + half_width)
+        N_range = max(1, idx_f2 - half_width):min(padsize[2], idx_f2 + half_width)
+
+        ## Set up FFT2Zoom with the search region
+        Mset = 0:(arrsize[1] - 1)
+        Nset = 0:(arrsize[2] - 1)
+        Rset = freqs_x_full[M_range]
+        Sset = freqs_y_full[N_range]
+
+        ## Compute zoomed FFT (use DC-removed signal consistently)
+        fft_zoom = FFT2Zoom(Mset, Nset, Rset, Sset)
+        zoomed_spectrum = fft_zoom(signal_no_dc)
+
+        ## Find peak in zoomed region
+        peak_idx_zoom = argmax(abs.(zoomed_spectrum))
+        current_freq = [Rset[peak_idx_zoom[1]], Sset[peak_idx_zoom[2]]]
+        peak_amp = zoomed_spectrum[peak_idx_zoom]
+
+        ## Store history
+        push!(freqs_hist, copy(current_freq))
+        push!(amp_hist, peak_amp)
+    end
+
+    ## Return final frequency, phase, and history
+    final_phase = angle(amp_hist[end])
+    return (current_freq, final_phase), amp_hist, freqs_hist
+end
+
 # to make it compatible with Quarto, not needed in the final version of the module
 # dpng(x) = display("image/png", x)
 
 dpng(x) = nothing
 
-export findfirstharmonic2
+export findfirstharmonic2, findfirstharmonic2_v2
 
 end

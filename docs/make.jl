@@ -33,6 +33,7 @@ makedocs(;
         "Manual" => [
             "Finding tilts" => "tutorials/FindingTilts.md",
             "PTIestimate Structure" => "tutorials/PTIestimate_tutorial.md",
+            "Zoomed FFT" => "tutorials/ZoomedFFT.md",
         ],
     ],
 )

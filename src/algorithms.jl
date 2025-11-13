@@ -102,6 +102,7 @@ function gettilts(idiffs, alg::FineTilts)
             erasesize=alg.erasesize,
             cropsize=alg.cropsize,
             visualdebug=false,
+            dofftshift=false,
         )
         tilts[i] .= tilt
         taus[i] .= τ

@@ -5,7 +5,7 @@
 ######################
 
 """
-    fourier_tilt(τ, σ, arrsize, fftshift = false)
+    fourier_tilt(τ, σ, arrsize, dofftshift = false)
 
 Construct an array of values of linear function `t(x) = τ⋅x +σ` compatible with Fourier transform coordinates, that is `T(ξ)=F(exp(i t(x)))` has maximum at `ξ=τ/(2π)`. Coordinates: `ξ` is defined by `fftfreq`, `x` defined with the origin at `arrsize÷2+1` for `fftshift = true` and with the origin at at the first element of the array if `fftshift = false`.
 """
@@ -71,7 +71,13 @@ end  # function get_tilt
 TBW
 """
 function getfinetilt(
-    idiff; n=[1, 1], zoomlevels=nothing, visualdebug=false, erasesize=2, cropsize=2
+    idiff;
+    n=nothing,
+    zoomlevels=nothing,
+    visualdebug=false,
+    erasesize=2,
+    cropsize=2,
+    dofftshift=false,
 )
     # process default normal
     if isnothing(n)
@@ -80,13 +86,14 @@ function getfinetilt(
 
     arrsize = size(idiff)
     (f, σ) = first(
-        findfirstharmonic2(
-            idiff .^ 2;
-            zoomlevels=zoomlevels,
-            visualdebug=visualdebug,
-            erasesize=erasesize,
-            cropsize=cropsize,
-        ),
+        # findfirstharmonic2(
+        #     idiff .^ 2;
+        #     zoomlevels=zoomlevels,
+        #     visualdebug=visualdebug,
+        #     erasesize=erasesize,
+        #     cropsize=cropsize,
+        # ),
+        findfirstharmonic2_v2(idiff .^ 2; zoomlevels=zoomlevels, erasesize=erasesize),
     )
     # @show τ, σ
     if dotproduct(f, n) < 0
@@ -96,7 +103,7 @@ function getfinetilt(
     τ = 2π .* f
     σ = phwrap(σ + π)
     # tilt = σ .+ [2π * (i * τ[1] + j * τ[2]) for i in 1:arrsize[1], j in 1:arrsize[2]]
-    tilt = fourier_tilt(2π * f, σ, arrsize)
+    tilt = fourier_tilt(2π * f, σ, arrsize, dofftshift)
     return tilt, τ, σ
 end
 

@@ -1,6 +1,7 @@
 module PhaseFromInterferograms
 using FFTW
 using FFTViews
+using PhaseUtils
 using PhaseUtils: phwrap, dotproduct, GaussianWindow
 using PhaseUtils:
     Tilt,
@@ -28,7 +29,7 @@ export eraseZerothOrder, eraseZerothOrder!, findfirstharmonic
 
 include("zoomFFTmodule.jl")
 using .zoomFFT2D
-export findfirstharmonic2
+export findfirstharmonic2, findfirstharmonic2_v2
 
 include("methods.jl")
 export get_tilt, fourier_tilt

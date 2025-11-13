@@ -15,7 +15,7 @@ using PhaseFromInterferograms
 import PhaseFromInterferograms as PFI # to get access to not exported function e.g. as PFI.background
 using PhaseFromInterferograms: fourier_tilt, getslopes
 using LaTeXStrings
-CairoMakie.activate!()
+CairoMakie.activate!(; type="png")
 
 arrsize = (50, 35)
 i, j = 3, 8
@@ -95,7 +95,7 @@ showarray(
 # This section demonstrates the frequency detection capabilities of the algorithm on signals with known periodicity.
 
 # Our algorithm  for the complex signal should behave the same at zoom level 1 as making the Fourier transform and taking the component with the max coordinate
-(fhat, sigma), amp_hist, freqs_hist = findfirstharmonic2(sig; zoomlevels=[1])
+(fhat, sigma), amp_hist, freqs_hist = findfirstharmonic2_v2(sig; zoomlevels=[1])
 @show fhat
 @show sigma
 @show all(fhat .≈ (f1, f2))
@@ -103,7 +103,7 @@ showarray(
 
 # The results are, of course, the same for other zoom levels
 for zl in [[1], [1, 2], [1, 8], [1, 2, 16], nothing]
-    fhat, sigma = findfirstharmonic2(sig; zoomlevels=zl)[1]
+    fhat, sigma = findfirstharmonic2_v2(sig; zoomlevels=zl)[1]
     fhat = flipsign.(fhat, fhat[1])
     ## @test all(fhat .≈ [f1, f2])
     @show fhat
@@ -116,7 +116,7 @@ end
 
 # Check it on the real signal
 for zl in [[1], [1, 2], [1, 8], [1, 2, 16], nothing]
-    fhat, sigma = findfirstharmonic2(real.(sig); zoomlevels=zl)[1]
+    fhat, sigma = findfirstharmonic2_v2(real.(sig); zoomlevels=zl)[1]
     sigma = flipsign(sigma, fhat[1])
     fhat = flipsign.(fhat, fhat[1])
     ## @test all(fhat .≈ [f1, f2])
@@ -134,7 +134,7 @@ relerrsX = Float64[]
 relerrsY = Float64[]
 sigmas = Float32[]
 for zl in [[1], [1, 2], [1, 4], [1, 8], [1, 4, 16], nothing]
-    fhat, sigma = findfirstharmonic2(real.(sigs); zoomlevels=zl)[1]
+    fhat, sigma = findfirstharmonic2_v2(real.(sigs); zoomlevels=zl)[1]
     sigma = flipsign(sigma, fhat[1])
     fhat = flipsign.(fhat, fhat[1])
     scale = isnothing(zl) ? minimum(arrsize) : last(zl)
@@ -159,7 +159,7 @@ axislegend()
 fig
 
 # The offset error also decreases
-fig, ax, l = lines(scales, sigmas; label="restored")
+fig, ax, l = scatterlines(scales, sigmas; label="restored")
 hlines!(offset; label="GT", color=:orange)
 axislegend()
 ax.title = "Offset detection"
@@ -171,7 +171,7 @@ fig
 
 # Thus, only from the real signal we have restored the parameters of its main harmonics (we have used however the _a priory_ knowledge about the sign of the tilt).
 # Finally, we can reconstruct the tilt from the found frequencies using the same function
-fhat, sigma = findfirstharmonic2(real.(sigs))[1]
+fhat, sigma = findfirstharmonic2_v2(real.(sigs))[1]
 sigma = flipsign(sigma, fhat[1])
 fhat = flipsign.(fhat, fhat[1])
 restored_tilt = fourier_tilt(2π * fhat, sigma, arrsize)
@@ -185,7 +185,12 @@ fig
 
 # And we check the error in the restoration
 err_tilt = restored_tilt .- tilts
-fig, ax, hm = showarray(err_tilt; axis=(title=L"Error $t(x) - \hat{t}(x)$ ",), rot=0);
+err_rms = sqrt(sum(err_tilt .^ 2) / length(err_tilt))
+fig, ax, hm = showarray(
+    err_tilt;
+    axis=(title=L"Error $t(x) - \hat{t}(x)$, RMS = %$(round(err_rms, digits=4))",),
+    rot=0,
+);
 Colorbar(fig[1, 2], hm)
 fig
 

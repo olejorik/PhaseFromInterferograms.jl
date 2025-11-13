@@ -32,15 +32,19 @@ coligramdiff = :diverging_gwr_55_95_c38_n256;
 # We start by creating a PTIestimate structure from dimensions only, without any measured data.
 
 # Create PTIestimate for forward modeling: 500×800 pixels, 3x5 interferograms
-pti_forward = PTIestimate((500, 800), (3,5); frameaxes=PFI.FourierAxes())
+pti_forward = PTIestimate((500, 800), (3, 5); frameaxes=PFI.FourierAxes())
 @show typeof(pti_forward)
 
 # Check that no measured data is present
 @show PFI.hasdata(pti_forward)  # Should be false
 
 # Examine the coordinate system and structure
-for (i, ax) in enumerate(pti_forward.frameaxes)  print("frame axis$i: $ax \n") end
-for (i, ax) in enumerate(pti_forward.setaxes)  print("set axis$i: $ax \n") end
+for (i, ax) in enumerate(pti_forward.frameaxes)
+    print("frame axis$i: $ax \n")
+end
+for (i, ax) in enumerate(pti_forward.setaxes)
+    print("set axis$i: $ax \n")
+end
 @show PFI.framesize(pti_forward)
 @show PFI.setsize(pti_forward)
 
@@ -55,6 +59,7 @@ coords = Iterators.product(pti_forward.frameaxes...)
 # Set circular aperture mask in Fourier space
 r = 0.45
 PFI.setmask!(pti_forward, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
+nothing #hide
 
 # ## 3. Initial State: Understanding the Default Parameters
 #
@@ -75,7 +80,7 @@ plot_heatmaps_table(
 
 # Display initial interferograms (all identical due to zero phase and tilts)
 plot_heatmaps_table(
-    eachslice(PFI.getigrams(pti_forward); dims=3)[1:4];
+    eachslice(PFI.getigrams(pti_forward); dims=(3, 4))[1:4];
     colormap=coligram,
     aspect=AxisAspect(1),
     titles=["Frame $i" for i in 1:4],
@@ -143,7 +148,7 @@ showphase(PFI.getphase(pti_forward))[1]
 
 # Display the phase pattern and show interferograms with new phase (still identical due to zero tilts)
 plot_heatmaps_table(
-    eachslice(PFI.getigrams(pti_forward); dims=3)[1:4];
+    eachslice(PFI.getigrams(pti_forward); dims=(3, 4))[1:4];
     colormap=coligram,
     aspect=AxisAspect(1),
     titles=["Frame 1", "Frame 2", "Frame 3", "Frame 4"],
@@ -160,7 +165,7 @@ PFI.settilts!(
 
 # Now interferograms show clear differences due to tilts
 plot_heatmaps_table(
-    eachslice(PFI.getigrams(pti_forward); dims=3);
+    eachslice(PFI.getigrams(pti_forward); dims=(3, 4))[1:15];
     colormap=coligram,
     aspect=AxisAspect(1),
     titles=["Frame $i" for i in 1:15],
@@ -169,15 +174,20 @@ plot_heatmaps_table(
 # Update tilts to demonstrate different tilt patterns
 PFI.settilts!(
     pti_forward, PFI.FreeTilt.([10π * (randn(3) .- 0.5) for _ in PFI.tilts(pti_forward)])
-)
+);
 plot_heatmaps_table(
-    eachslice(PFI.getigrams(pti_forward); dims=3);
+    eachslice(PFI.getigrams(pti_forward); dims=(3, 4))[1:15];
     colormap=coligram,
     aspect=AxisAspect(1),
     titles=["Frame $i" for i in 1:15],
 )
 
-print("Some current tilts: ", pti_forward.tilts[1, 1, 1:3])
+# Display tilts using the convenient :set view
+println("First 3 tilts:")
+for (i, (idx, tilt)) in enumerate(pairs(PFI.tilts(pti_forward; view=:set)))
+    i > 3 && break
+    println("  Frame $idx: σ=$(PFI.sigma(tilt)), τ=$(PFI.tau(tilt))")
+end
 
 # ## 6. Forward Model Applications
 #
@@ -188,13 +198,39 @@ synthetic_igrams = PFI.getigrams(pti_forward);
 
 # Helper function for plotting
 pht(arr; kwargs...) =
-    plot_heatmaps_table(eachslice(arr; dims=3); aspect=AxisAspect(1), kwargs...)
+    plot_heatmaps_table(eachslice(arr; dims=(3, 4)); aspect=AxisAspect(1), kwargs...)
 
 # Analyze interferogram differences (important for tilt estimation)
 deltas = diff(synthetic_igrams; dims=3)
-pht(deltas; colormap=coligramdiff, titles=["Δ$i" for i in 1:size(deltas, 3)])
+pht(deltas; colormap=coligramdiff)
 
-# ## 7. Understanding the Physical Model
+# ## 7. Accessing Tilts: Raw vs Set Views
+#
+# PTIestimate provides convenient interfaces for accessing tilt data in different shapes.
+
+# Access tilts in broadcast shape (default)
+t_raw = PFI.tilts(pti_forward)  # Returns (1, 1, setsize...) shape
+@show size(t_raw)
+
+# Access tilts in set-only shape for easier iteration
+t_set = PFI.tilts(pti_forward; view=:set)  # Returns setsize shape
+@show size(t_set)
+
+# Iterate over tilts without dealing with leading dimensions
+println("First 5 tilts (sigma, tau_x, tau_y):")
+for (i, (idx, tilt)) in enumerate(pairs(t_set))
+    i > 5 && break
+    println("  Set index $idx: σ=$(PFI.sigma(tilt)), τ=$(PFI.tau(tilt))")
+end
+
+# Get evaluated tilts as slices for set-specific analysis
+t_eval_slices = PFI.gettilts(pti_forward; view=:set)
+for (i, (idx, tilt_values)) in enumerate(pairs(t_eval_slices))
+    i > 3 && break
+    println("  Tilt field $idx has size $(size(tilt_values))")
+end
+
+# ## 8. Understanding the Physical Model
 #
 # Each interferogram follows the model: I = background + Re(complex_amplitude × exp(i×tilt))
 
@@ -205,31 +241,32 @@ pht(deltas; colormap=coligramdiff, titles=["Δ$i" for i in 1:size(deltas, 3)])
 
 # Store our forward model results for later comparison
 ground_truth_phase = PFI.getphase(pti_forward)
-ground_truth_tilts = deepcopy(PFI.tilts(pti_forward))
+ground_truth_tilts = deepcopy(PFI.tilts(pti_forward; view=:set))
 ground_truth_igrams = copy(synthetic_igrams);
 
 # # Part II: Inverse Problems with PTIestimate
 #
 # Now we'll demonstrate how to use PTIestimate for inverse problems - estimating parameters from measured data.
 
-# ## 8. Creating PTIestimate from Measured Data
+# ## 9. Creating PTIestimate from Measured Data
 #
 # We'll use our synthetic data as "measured" interferograms to test the inverse algorithms.
 
 # Create PTIestimate from interferogram data (simulating measured data)
-measured_data = eachslice(ground_truth_igrams; dims=3)
+measured_data = eachslice(ground_truth_igrams; dims=(3, 4))
 pti_inverse = PTIestimate(measured_data; frameaxes=PFI.FourierAxes())
 
 # Check that measured data is now stored in the structure
 @show PFI.hasdata(pti_inverse)  # Should be true
 @show size(PFI.data(pti_inverse))
+plot_heatmaps_table(PFI.getdatasliced(pti_inverse))
 
 # The structure now contains both model parameters and measured data
 @show typeof(pti_inverse)
 @show PFI.framesize(pti_inverse)
 @show PFI.setsize(pti_inverse)
 
-# ## 9. Initial Parameter Estimation
+# ## 10. Initial Parameter Estimation
 #
 # The first step in inverse PFI is to obtain rough estimates of the tilts.
 
@@ -237,11 +274,11 @@ pti_inverse = PTIestimate(measured_data; frameaxes=PFI.FourierAxes())
 PFI.setmask!(pti_inverse, map(x -> x[1]^2 + x[2]^2 <= r^2, coords));
 
 # Initialize with rough tilt estimates using the new convenient API
-refframe = 2
+refframe = (2, 1)
 PFI.initialize!(pti_inverse; refframe=refframe)  # Uses internal data automatically
 
 # Display initial tilt estimates
-@show pti_inverse.tilts[1, 1, 1:3]
+@show PFI.tilts(pti_inverse; view=:set)[1:3]
 
 # Show what the interferograms look like with initial estimates
 plot_heatmaps_table(
@@ -253,57 +290,57 @@ plot_heatmaps_table(
 
 # Adjust tilt signs for proper convergence (using ground truth for demonstration)
 normals = [
-    PFI.tau(t) - PFI.tau(ground_truth_tilts[1, 1, refframe]) for
-    t in ground_truth_tilts[1, 1, :]
+    PFI.tau(t) - PFI.tau(ground_truth_tilts[refframe...]) for t in ground_truth_tilts
 ]
 PFI.set_tilt_signs!(pti_inverse, normals)
 
-# ## 10. Phase and Background Estimation
+# ## 11. Phase and Background Estimation
 #
 # Use phase-shifting interferometry to estimate phase and background from the current tilt estimates.
 
 # Apply least-squares PSI algorithm using the convenient API
 psialg = PFI.LSPSI()
-coords_inv = Iterators.product(pti_inverse.frameaxes...)
-deltas_est = eachslice(
-    PFI.apply.(pti_inverse.tilts, coords_inv); dims=PFI.setdims(pti_inverse)
-)
-PhaseBgAmp = psialg(eachslice(PFI.data(pti_inverse); dims=3), deltas_est; full=true);
+deltas_est = PFI.gettilts(pti_inverse; view=:set)
+PhaseBgAmp = psialg(PFI.getdatasliced(pti_inverse), deltas_est; full=true);
 
 # Display initial estimation results
-fig = Figure(; size=(1200, 400))
-fig[1, 1] = Axis(fig; title="Estimated Phase")
-fig[1, 2] = Axis(fig; title="Estimated Background")
-fig[1, 3] = Axis(fig; title="Estimated Amplitude")
-showphase!(fig[1, 1], PhaseBgAmp[1])
-showarray!(fig[1, 2], PhaseBgAmp[3])
-showarray!(fig[1, 3], abs.(PhaseBgAmp[2]))
+fig = Figure(; size=(1200, 400));
+ax1 = Axis(fig[1, 1]; title="Estimated Phase", aspect=DataAspect())
+ax2 = Axis(fig[1, 2]; title="Estimated Background", aspect=DataAspect())
+ax3 = Axis(fig[1, 3]; title="Estimated Amplitude", aspect=DataAspect())
+showphase!(ax1, PhaseBgAmp[1])
+showarray!(ax2, PhaseBgAmp[3])
+showarray!(ax3, abs.(PhaseBgAmp[2]))
 fig
 
 # Update the estimate with new values
 PFI.setcomplexamplitude!(pti_inverse, PhaseBgAmp[2])
 PFI.setbackground!(pti_inverse, PhaseBgAmp[3]);
 
-# ## 11. Iterative Refinement
+# ## 12. Iterative Refinement
 #
 # The key to accurate PFI analysis is iterative refinement of both phase/background and tilts.
 
 # Exact tilt estimation functions (from PTIestimate_test.jl)
-function get_taux(qqq, n)
-    ## n is the index of the tilt
+# Exact tilt estimation functions (from PTIestimate_test.jl)
+# Modified to work with set-view indexing
+function get_taux(qqq, idx)
+    ## idx is the CartesianIndex in the set dimensions
+    igrams_sliced = PFI.getdatasliced(qqq)
+    igram = igrams_sliced[idx]
+
     A1 = zeros(ComplexF64, PFI.framesize(qqq)[2], 2)
     b1 = zeros(ComplexF64, PFI.framesize(qqq)[2])
-    alltau = [get_taux(qqq, n, mx, A1, b1) for mx in 1:PFI.framesize(qqq)[1]]
+    alltau = [get_taux_row(qqq, igram, mx, A1, b1) for mx in 1:PFI.framesize(qqq)[1]]
     t1est = phwrap(diff(alltau[(!isnan).(alltau)]))
     return mean(t1est) / step(qqq.frameaxes[1])
 end
 
-function get_taux(qqq, n, mx, A1, b1)
-    igrams = PFI.getigrams(qqq)
+function get_taux_row(qqq, igram, mx, A1, b1)
     for my in 1:PFI.framesize(qqq)[2]
         A1[my, 1] = PFI.complexamplitude(qqq)[mx, my] * qqq.mask[mx, my]
         A1[my, 2] = conj(A1[my, 1])
-        b1[my] = (igrams[mx, my, n] - PFI.background(qqq)[mx, my]) * qqq.mask[mx, my]
+        b1[my] = (igram[mx, my] - PFI.background(qqq)[mx, my]) * qqq.mask[mx, my]
     end
     if sum(b1 .!= 0) > 2
         d1 = A1 \ b1
@@ -313,20 +350,23 @@ function get_taux(qqq, n, mx, A1, b1)
     end
 end
 
-function get_tauy(qqq, n)
+function get_tauy(qqq, idx)
+    ## idx is the CartesianIndex in the set dimensions
+    igrams_sliced = PFI.getdatasliced(qqq)
+    igram = igrams_sliced[idx]
+
     A1 = zeros(ComplexF64, PFI.framesize(qqq)[1], 2)
     b1 = zeros(ComplexF64, PFI.framesize(qqq)[1])
-    alltau = [get_tauy(qqq, n, my, A1, b1) for my in 1:PFI.framesize(qqq)[2]]
+    alltau = [get_tauy_col(qqq, igram, my, A1, b1) for my in 1:PFI.framesize(qqq)[2]]
     t1est = phwrap(diff(alltau[(!isnan).(alltau)]))
     return mean(t1est) / step(qqq.frameaxes[2])
 end
 
-function get_tauy(qqq, n, my, A1, b1)
-    igrams = PFI.getigrams(qqq)
+function get_tauy_col(qqq, igram, my, A1, b1)
     for mx in 1:PFI.framesize(qqq)[1]
         A1[mx, 1] = PFI.complexamplitude(qqq)[mx, my] * qqq.mask[mx, my]
         A1[mx, 2] = conj(A1[mx, 1])
-        b1[mx] = (igrams[mx, my, n] - PFI.background(qqq)[mx, my]) * qqq.mask[mx, my]
+        b1[mx] = (igram[mx, my] - PFI.background(qqq)[mx, my]) * qqq.mask[mx, my]
     end
     if sum(b1 .!= 0) > 2
         d1 = A1 \ b1
@@ -336,20 +376,21 @@ function get_tauy(qqq, n, my, A1, b1)
     end
 end
 
-function get_sigma(qqq, n)
+function get_sigma(qqq, idx)
+    ## idx is the CartesianIndex in the set dimensions
+    igrams_sliced = PFI.getdatasliced(qqq)
+    igram = igrams_sliced[idx]
+
     A1 = zeros(ComplexF64, prod(PFI.framesize(qqq)), 2)
     b1 = zeros(ComplexF64, prod(PFI.framesize(qqq)))
-    return get_sigma(qqq, n, A1, b1)
+    return get_sigma_all(qqq, igram, A1, b1)
 end
 
-function get_sigma(qqq, n, A1, b1)
-    coords = Iterators.product(qqq.frameaxes...)
-    igrams = PFI.getigrams(qqq)
-    for (i, x) in enumerate(coords)
+function get_sigma_all(qqq, igram, A1, b1)
+    for i in 1:length(igram)
         A1[i, 1] = PFI.complexamplitude(qqq)[i] * qqq.mask[i]
         A1[i, 2] = conj(A1[i, 1])
-        b1[i] =
-            (igrams[i + (n - 1) * length(coords)] - PFI.background(qqq)[i]) * qqq.mask[i]
+        b1[i] = (igram[i] - PFI.background(qqq)[i]) * qqq.mask[i]
     end
     if sum(b1 .!= 0) > 2
         d1 = A1 \ b1
@@ -360,27 +401,31 @@ function get_sigma(qqq, n, A1, b1)
 end
 
 # Perform iterative refinement
-for k in 1:10
+for k in 1:100
     @info "Iteration $k"
 
     ## Phase and background estimation
-    deltas_est = eachslice(
-        PFI.apply.(pti_inverse.tilts, coords_inv); dims=PFI.setdims(pti_inverse)
-    )
-    PhaseBgAmp = psialg(PFI.data(pti_inverse), deltas_est; full=true)
+    deltas_est = PFI.gettilts(pti_inverse; view=:set)
+    PhaseBgAmp = psialg(PFI.getdatasliced(pti_inverse), deltas_est; full=true)
 
     ## Update estimates
     PFI.setcomplexamplitude!(pti_inverse, PhaseBgAmp[2])
     PFI.setbackground!(pti_inverse, PhaseBgAmp[3])
 
-    ## Exact tilt refinement
-    all_taux = [get_taux(pti_inverse, tiltind) for tiltind in pti_inverse.setaxes[1]]
-    all_tauy = [get_tauy(pti_inverse, tiltind) for tiltind in pti_inverse.setaxes[1]]
-    all_sigma = [get_sigma(pti_inverse, tiltind) for tiltind in pti_inverse.setaxes[1]]
+    ## Exact tilt refinement - iterate using CartesianIndices like :set view
+    all_taux = [
+        get_taux(pti_inverse, idx) for idx in CartesianIndices(PFI.setsize(pti_inverse))
+    ]
+    all_tauy = [
+        get_tauy(pti_inverse, idx) for idx in CartesianIndices(PFI.setsize(pti_inverse))
+    ]
+    all_sigma = [
+        get_sigma(pti_inverse, idx) for idx in CartesianIndices(PFI.setsize(pti_inverse))
+    ]
 
     ## Update tilts
     newtilts = reshape(
-        [PFI.FreeTilt([c]) for c in zip(all_sigma, all_taux, all_tauy)],
+        [PFI.FreeTilt([s, tx, ty]) for (s, tx, ty) in zip(all_sigma, all_taux, all_tauy)],
         size(pti_inverse.tilts),
     )
     pti_inverse.tilts .= newtilts
@@ -396,7 +441,7 @@ for k in 1:10
     end
 end
 
-# ## 12. Validation Against Ground Truth
+# ## 13. Validation Against Ground Truth
 #
 # Now we can compare our estimated parameters with the known ground truth from the forward model.
 
@@ -404,31 +449,33 @@ end
 final_estimated_phase = PFI.getphase(pti_inverse)
 
 # Compare phases
-fig = Figure(; size=(1200, 400))
-fig[1, 1] = Axis(fig; title="Estimated Phase")
-fig[1, 2] = Axis(fig; title="Ground Truth Phase")
-fig[1, 3] = Axis(fig; title="Phase Difference")
-showphase!(fig[1, 1], final_estimated_phase)
-showphase!(fig[1, 2], ground_truth_phase)
-showphase!(fig[1, 3], phwrap.(final_estimated_phase - ground_truth_phase))
+fig = Figure(; size=(1200, 400));
+ax1 = Axis(fig[1, 1]; title="Estimated Phase", aspect=DataAspect())
+ax2 = Axis(fig[1, 2]; title="Ground Truth Phase", aspect=DataAspect())
+ax3 = Axis(fig[1, 3]; title="Phase Difference", aspect=DataAspect())
+showphase!(ax1, final_estimated_phase)
+showphase!(ax2, ground_truth_phase)
+showphase!(ax3, phwrap.(final_estimated_phase - ground_truth_phase))
 fig
 
-# Compare tilt estimation accuracy
-gt_taux = [PFI.tau(tilt)[1] for tilt in ground_truth_tilts[1, 1, :]]
-gt_tauy = [PFI.tau(tilt)[2] for tilt in ground_truth_tilts[1, 1, :]]
-gt_sigma = [PFI.sigma(tilt) for tilt in ground_truth_tilts[1, 1, :]]
+# Compare tilt estimation accuracy using :set view for cleaner iteration
+gt_tilts_set = reshape(ground_truth_tilts, size(PFI.tilts(pti_inverse; view=:set)))
+gt_taux = [PFI.tau(tilt)[1] for tilt in gt_tilts_set]
+gt_tauy = [PFI.tau(tilt)[2] for tilt in gt_tilts_set]
+gt_sigma = [PFI.sigma(tilt) for tilt in gt_tilts_set]
 
-est_taux = [PFI.tau(tilt)[1] for tilt in pti_inverse.tilts[1, 1, :]]
-est_tauy = [PFI.tau(tilt)[2] for tilt in pti_inverse.tilts[1, 1, :]]
-est_sigma = [PFI.sigma(tilt) for tilt in pti_inverse.tilts[1, 1, :]]
+est_taux = [PFI.tau(tilt)[1] for tilt in PFI.tilts(pti_inverse; view=:set)]
+est_tauy = [PFI.tau(tilt)[2] for tilt in PFI.tilts(pti_inverse; view=:set)]
+est_sigma = [PFI.sigma(tilt) for tilt in PFI.tilts(pti_inverse; view=:set)]
 
 # Display tilt estimation errors
-fig_tilts = Figure(; size=(1200, 300))
-scatter(fig_tilts[1, 1], est_taux - gt_taux; axis=(; title="Error in τₓ"))
-scatter(fig_tilts[1, 2], est_tauy - gt_tauy; axis=(; title="Error in τᵧ"))
-scatter(
-    fig_tilts[1, 3], phwrap.(est_sigma - gt_sigma); axis=(; title="Error in σ (wrapped)")
-)
+fig_tilts = Figure(; size=(1200, 300));
+ax1 = Axis(fig_tilts[1, 1]; title="Error in τₓ")
+ax2 = Axis(fig_tilts[1, 2]; title="Error in τᵧ")
+ax3 = Axis(fig_tilts[1, 3]; title="Error in σ (wrapped)")
+scatter!(ax1, est_taux - gt_taux)
+scatter!(ax2, est_tauy - gt_tauy)
+scatter!(ax3, phwrap.(est_sigma - gt_sigma))
 fig_tilts
 
 # Print summary statistics
@@ -440,9 +487,34 @@ println("Tilt τₓ RMS error: ", sqrt(mean((est_taux - gt_taux) .^ 2)))
 println("Tilt τᵧ RMS error: ", sqrt(mean((est_tauy - gt_tauy) .^ 2)))
 println("Tilt σ RMS error: ", sqrt(mean((phwrap.(est_sigma - gt_sigma)) .^ 2)))
 
+# ## 14. Testing the Interface
+#
+# The following examples demonstrate the robustness of the interface (from test suite):
+
+# Verify dimension handling
+framesize = (20, 25)
+setsize = (3, 4)
+pti_test = PTIestimate(framesize, setsize)
+
+@assert size(PFI.tilts(pti_test; view=:raw)) == (1, 1, 3, 4)
+@assert size(PFI.tilts(pti_test; view=:set)) == (3, 4)
+@assert length(PFI.gettilts(pti_test; view=:set)) == 12
+
+println("✓ Interface dimensions correct")
+
+# Verify evaluation correctness
+σ_test, τx_test, τy_test = π / 3, 0.15, 0.25
+PFI.tilts(pti_test; view=:set)[1, 1] = PFI.FreeTilt([σ_test, τx_test, τy_test])
+t_eval = PFI.gettilts(pti_test; view=:raw)
+expected_00 =
+    σ_test + τx_test * pti_test.frameaxes[1][10] + τy_test * pti_test.frameaxes[2][10]
+@assert t_eval[10, 10, 1, 1] ≈ expected_00
+
+println("✓ Tilt evaluation correct")
+
 # # Part III: Key Features and API Summary
 
-# ## 13. PTIestimate API Summary
+# ## 15. PTIestimate API Summary
 #
 # The tutorial has demonstrated the two primary usage patterns:
 
@@ -460,6 +532,22 @@ println("Tilt σ RMS error: ", sqrt(mean((phwrap.(est_sigma - gt_sigma)) .^ 2)))
 # PFI.initialize!(pti)  # Uses internal data
 # # Iterative refinement...
 # estimated_phase = PFI.getphase(pti)
+# ```
+
+# **Tilt Access Patterns:**
+# ```julia
+# # Raw broadcast shape (compatible with internal structure)
+# t_raw = PFI.tilts(pti)  # Size: (1, 1, setsize...)
+#
+# # Set-only shape (convenient for iteration)
+# t_set = PFI.tilts(pti; view=:set)  # Size: setsize
+# for (idx, tilt) in pairs(t_set)
+#     # Process each tilt without index gymnastics
+# end
+#
+# # Evaluated tilt fields
+# t_eval = PFI.gettilts(pti; view=:raw)    # Full tensor
+# t_slices = PFI.gettilts(pti; view=:set)  # Sliced by set dims
 # ```
 
 # ## Conclusions

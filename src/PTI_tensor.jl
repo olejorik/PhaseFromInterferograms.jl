@@ -30,6 +30,15 @@ where:
 - dₙ = exp(iδₙ) is the tilt factor for interferogram n
 - δₙ(x) = σₙ + τₙ ⋅ x  is a linear phase function, x is the spatial coordinate, and n is the interferogram index (may be also multi-dimensional)
 
+# Broadcasting Structure
+The data structure uses complementary array shapes for efficient broadcasting:
+- **Shared across interferograms**: size `(framesize..., 1, 1, ...)`
+  → `background`, `complexamplitude`, `mask`
+- **Unique per interferogram**: size `(1, 1, ..., setsize...)`
+  → `tilts`
+
+This enables efficient tensor operations: `(framesize..., 1...) .⊗ (1..., setsize...) → (framesize..., setsize...)`
+
 # Structure Fields
 - `framesize::Int`: Number of spatial dimensions
 - `setsize::Int`: Number of interferogram set dimensions
@@ -87,7 +96,10 @@ struct PTIestimate{M,TT,TFA,TSA}
 end
 
 function PTIestimate(
-    framesize::NTuple, setsize::NTuple; frameaxes=DataAxesCentered(), setaxes=DataAxes()
+    framesize::NTuple,
+    setsize::NTuple;
+    frameaxes=PhaseUtils.DataAxesCentered(),
+    setaxes=PhaseUtils.DataAxes(),
 )
     K = length(framesize)
     M = length(setsize)
@@ -116,8 +128,8 @@ end
 
 function PTIestimate(
     igrams::Union{Array{T} where {T<:Array},Slices};
-    frameaxes=DataAxesCentered(),
-    setaxes=DataAxes(),
+    frameaxes=PhaseUtils.DataAxesCentered(),
+    setaxes=PhaseUtils.DataAxes(),
 )
     # Create the basic structure
     framesize = size(igrams[1])
@@ -132,8 +144,7 @@ function PTIestimate(
     data_array = Array{Float64}(undef, fullsize...)
     for (i, igram) in pairs(IndexCartesian(), igrams)
         # Use linear indexing for the last dimensions
-        indices = (Colon() for _ in 1:K)..., Tuple(i)...
-        data_array[indices...] = igram
+        data_array[(Colon() for _ in 1:K)..., i] .= igram
     end
 
     return PTIestimate(
@@ -151,7 +162,7 @@ function PTIestimate(
         frameax,
         setax,
         copy(data_array),  # Initialize igrams with copy of data
-        copy(data_array),  # Store measured data
+        data_array,  # Store measured data
         [false],  # igrams need to be updated
     )
 end
@@ -161,33 +172,127 @@ end
 background(p::PTIestimate) = p.background
 complexamplitude(p::PTIestimate) = p.complexamplitude
 mask(p::PTIestimate) = p.mask
-tilts(p::PTIestimate) = p.tilts
 data(p::PTIestimate) = p.data
+
+"""
+    tilts(p::PTIestimate; view=:raw)
+
+Return the tilt objects (coefficient arrays).
+
+# Keyword Arguments
+- `view::Symbol`: Specifies the dimensionality of the returned array
+  - `:raw` (default): returns `p.tilts` with broadcasting shape `(1,1,...,setsize...)`
+  - `:set`: returns dropdims view indexed only by set dimensions
+
+# Examples
+```julia
+## Get raw tilts for broadcasting operations
+t_raw = tilts(pti)              # size (1, 1, ..., setsize...)
+
+## Iterate over tilts by set index only
+for (idx, tilt) in pairs(tilts(pti; view=:set))
+    println("Tilt at \$idx: σ=\$(sigma(tilt)), τ=\$(tau(tilt))")
+end
+```
+"""
+function tilts(p::PTIestimate; view::Symbol=:raw)
+    if view === :raw
+        return p.tilts
+    elseif view === :set
+        # Tilts array has size (1, 1, ..., setsize...)
+        # Return a reshaped view with only set dimensions
+        return reshape(p.tilts, setsize(p))
+    else
+        throw(ArgumentError("tilts view must be :raw or :set"))
+    end
+end
 framesize(p::PTIestimate) = p.fullsize[1:(p.framesize)]
 setsize(p::PTIestimate) = p.fullsize[(p.framesize + 1):(p.setsize + p.framesize)]
 
 hasdata(p::PTIestimate) = p.data !== nothing
-function requiredata(p::PTIestimate)
+function getdata(p::PTIestimate)
     hasdata(p) ||
         error("This operation requires measured data. Use setdata!(p, data) first.")
     return data(p)
 end
-function requiredatasliced(p::PTIestimate)
+function getdatasliced(p::PTIestimate)
     hasdata(p) ||
         error("This operation requires measured data. Use setdata!(p, data) first.")
-    return eachslice(data(p); dims=1:(p.framesize))
+    return eachslice(data(p); dims=setdims(p))
 end
 
+"""
+    getphase(p::PTIestimate)
+
+Return the phase values from the complex amplitude, reshaped to frame-only dimensions.
+
+The result has size `framesize(p)`, with set dimensions dropped via reshape.
+This provides a convenient frame-only view of the estimated phase.
+"""
 getphase(p::PTIestimate) = reshape(angle.(complexamplitude(p)), framesize(p))
+
+"""
+    getapodization(p::PTIestimate)
+
+Return the apodization (amplitude modulation) from the complex amplitude,
+reshaped to frame-only dimensions.
+
+The result has size `framesize(p)`, with set dimensions dropped via reshape.
+This provides a convenient frame-only view of the intensity modulation.
+"""
 getapodization(p::PTIestimate) = reshape(abs.(complexamplitude(p)), framesize(p))
+
+"""
+    getbackground(p::PTIestimate)
+
+Return the background intensity, reshaped to frame-only dimensions.
+
+The result has size `framesize(p)`, with set dimensions dropped via reshape.
+This provides a convenient frame-only view of the background field.
+"""
 getbackground(p::PTIestimate) = reshape(p.background, framesize(p))
 getigrams(p::PTIestimate) = p.insync[1] ? p.igrams : materialize!(p).igrams
 getigramssliced(p::PTIestimate) = eachslice(getigrams(p); dims=setdims(p))
-function gettilts(p::PTIestimate)
-    coords = Iterators.product(p.frameaxes...)
-    return apply.(p.tilts, coords)
+
+"""
+    gettilts(p::PTIestimate; view=:raw)
+
+Return tilt phase values evaluated over the frame coordinates.
+
+# Keyword Arguments
+- `view::Symbol`: Specifies the structure of the returned data
+  - `:raw` (default): returns full tensor with size `(framesize..., setsize...)`
+  - `:set`: returns slices indexed by set dimensions, each slice has size `framesize`
+
+The result contains the linear phase `δₙ(x) = σₙ + τₙ·x` evaluated at each spatial coordinate.
+
+# Examples
+```julia
+## Get all evaluated tilts as one big array
+t_eval = gettilts(pti)          # size (framesize..., setsize...)
+
+## Iterate over evaluated tilts by set index
+for (idx, tilt_frame) in pairs(gettilts(pti; view=:set))
+    ## tilt_frame has size framesize
+    println("Mean tilt at \$idx: \$(mean(tilt_frame))")
 end
-gettiltssliced(p::PTIestimate) = eachslice(gettilts(p); dims=setdims(p))
+```
+"""
+function gettilts(p::PTIestimate; view::Symbol=:raw)
+    coords = Iterators.product(p.frameaxes...)
+    tilts_eval = apply.(p.tilts, coords)
+
+    if view === :raw
+        return tilts_eval
+    elseif view === :set
+        # Return slices indexed by set dims only
+        return eachslice(tilts_eval; dims=setdims(p))
+    else
+        throw(ArgumentError("gettilts view must be :raw or :set"))
+    end
+end
+
+gettiltssliced(p::PTIestimate) = gettilts(p; view=:set)
 
 setbackground!(p::PTIestimate, b) = (p.insync .= false; p.background .= b)
 setcomplexamplitude!(p::PTIestimate, c) = (p.insync .= false; p.complexamplitude .= c)
@@ -256,25 +361,29 @@ setdims(p::PTIestimate) = Tuple((i + p.framesize) for i in 1:(p.setsize))
 #     return p
 # end
 
-function initialize!(p::PTIestimate, data, alg::SideLobeAlg; refframe=1)
-    data = eachslice(data; dims=3)
+
+function initialize!(p::PTIestimate, data, alg::SideLobeAlg; refframe=nothing)
+    refframe === nothing && (refframe = ntuple(i -> 1, p.setsize))
+    frameone = CartesianIndex(ntuple(i -> 1, p.framesize))
+    # data = eachslice(data; dims=setdims(p))
+    data = eachslice(data; dims=setdims(p))
     for (i, igram) in pairs(IndexCartesian(), data)
-        if i == CartesianIndex(refframe)
+        if i == CartesianIndex(refframe...)
             tiltguess = FreeTilt([0.0, 0.0, 0.0])
         else
-            idiffsq = (igram - data[refframe]) .^ 2
+            idiffsq = (igram - data[refframe...]) .^ 2
             pos, freq, amp = get_side_lobe_freq(idiffsq, alg)
             tiltguess = FreeTilt([angle(-amp), (2π * freq)...]) # it was -π - angle(amp); but I think now it's ±π
         end
-        p.tilts[i] = tiltguess
+        p.tilts[frameone, i] = tiltguess
     end
     p.insync .= false
     return p
 end
 
 # Convenience method that uses internal data - more specific signature
-function initialize!(p::PTIestimate, alg=FFTcrop1(); refframe::Int=1)
-    return initialize!(p, requiredata(p), alg; refframe=refframe)
+function initialize!(p::PTIestimate, alg=FFTcrop1(); refframe=nothing)
+    return initialize!(p, getdata(p), alg; refframe=refframe)
 end
 
 function set_tilt_signs!(p::PTIestimate, normals)
@@ -295,7 +404,7 @@ end
 
 # Convenience method that uses internal data - more specific signature
 function update_background_amplitude!(p::PTIestimate)
-    return update_background_amplitude!(p, requiredata(p), LSPhaseAlg())
+    return update_background_amplitude!(p, getdata(p), LSPhaseAlg())
 end
 
 function update_tilts!(p::PTIestimate, igrams, alg)
@@ -307,7 +416,7 @@ end
 
 # Convenience method that uses internal data - more specific signature
 function update_tilts!(p::PTIestimate)
-    return update_tilts!(p, requiredata(p), SymmetricLS())
+    return update_tilts!(p, getdata(p), SymmetricLS())
 end
 
 
