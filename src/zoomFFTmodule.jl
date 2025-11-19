@@ -253,8 +253,7 @@ function findfirstharmonic2_v2(signal; zoomlevels=nothing, half_width=16, erases
         ]
     end
 
-    ## Remove DC component from signal (important for real non-negative signals)
-    ## This is more effective than just zeroing DC in frequency domain
+    ## Remove DC component from signal
     signal_no_dc = if erasesize > 0
         removeDC(signal, erasesize)
     else
@@ -262,9 +261,8 @@ function findfirstharmonic2_v2(signal; zoomlevels=nothing, half_width=16, erases
     end
 
     ## Initial coarse frequency detection using standard FFT
-    spectrum = fft(signal_no_dc)
+    spectrum = fft(ifftshift(signal_no_dc))
     abs_spectrum = abs.(spectrum)
-
     peak_idx = argmax(abs_spectrum)
 
     ## Get initial frequency estimate
@@ -277,8 +275,8 @@ function findfirstharmonic2_v2(signal; zoomlevels=nothing, half_width=16, erases
     amp_hist = [spectrum[peak_idx]]
 
     ## Iteratively refine using zoom FFT
-    for zoom_factor in zoomlevels[2:end]  # Skip first level as we already did it
-        ## Create zoomed frequency grid centered on current estimate
+    for zoom_factor in zoomlevels[2:end]
+        ## Create zoomed frequency grid with virtual padding
         padsize = zoom_factor .* arrsize
         freqs_x_full = fftshift(fftfreq(padsize[1]))
         freqs_y_full = fftshift(fftfreq(padsize[2]))
@@ -292,12 +290,14 @@ function findfirstharmonic2_v2(signal; zoomlevels=nothing, half_width=16, erases
         N_range = max(1, idx_f2 - half_width):min(padsize[2], idx_f2 + half_width)
 
         ## Set up FFT2Zoom with the search region
-        Mset = 0:(arrsize[1] - 1)
-        Nset = 0:(arrsize[2] - 1)
+        # Mset = 0:(arrsize[1] - 1)
+        # Nset = 0:(arrsize[2] - 1)
+        Mset = (-floor(Int, arrsize[1] / 2)):(ceil(Int, arrsize[1] / 2) - 1)
+        Nset = (-floor(Int, arrsize[2] / 2)):(ceil(Int, arrsize[2] / 2) - 1)
         Rset = freqs_x_full[M_range]
         Sset = freqs_y_full[N_range]
 
-        ## Compute zoomed FFT (use DC-removed signal consistently)
+        ## Compute zoomed FFT
         fft_zoom = FFT2Zoom(Mset, Nset, Rset, Sset)
         zoomed_spectrum = fft_zoom(signal_no_dc)
 
@@ -311,9 +311,26 @@ function findfirstharmonic2_v2(signal; zoomlevels=nothing, half_width=16, erases
         push!(amp_hist, peak_amp)
     end
 
-    ## Return final frequency, phase, and history
-    final_phase = angle(amp_hist[end])
-    return (current_freq, final_phase), amp_hist, freqs_hist
+    ## Extract phase with coordinate offset correction
+    ## The detected phase corresponds to the virtual padded coordinate system
+    ## We need to shift it to the original array's first pixel
+    final_zoom = zoomlevels[end]
+    final_padsize = final_zoom .* arrsize
+
+    ## Offset: where the original array starts in the virtual padded array
+    ## TODO: This is a simplified calculation, a more general approach may be needed
+    # offset_x = (final_padsize[1] - arrsize[1]) / 2.0
+    # offset_y = (final_padsize[2] - arrsize[2]) / 2.0
+    offset_x = 0
+    offset_y = 0
+
+    ## Phase at padded origin
+    σ_padded = angle(-amp_hist[end])  ## Negative sign from equation (5)
+
+    ## Correct to original array origin: subtract phase accumulated over offset
+    σ_corrected = σ_padded - 2π * (current_freq[1] * offset_x + current_freq[2] * offset_y)
+
+    return (current_freq, σ_corrected), amp_hist, freqs_hist
 end
 
 # to make it compatible with Quarto, not needed in the final version of the module

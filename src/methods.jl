@@ -101,7 +101,7 @@ function getfinetilt(
         σ *= -1
     end
     τ = 2π .* f
-    σ = phwrap(σ + π)
+    σ = phwrap(σ)
     # tilt = σ .+ [2π * (i * τ[1] + j * τ[2]) for i in 1:arrsize[1], j in 1:arrsize[2]]
     tilt = fourier_tilt(2π * f, σ, arrsize, dofftshift)
     return tilt, τ, σ
