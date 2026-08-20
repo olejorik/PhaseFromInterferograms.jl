@@ -143,6 +143,8 @@ N_range = max(1, idx_f2 - half_width):min(padsize[2], idx_f2 + half_width)
 ## Compute zoomed FFT
 Mset = 0:(arrsize[1] - 1)
 Nset = 0:(arrsize[2] - 1)
+# Mset = ceil(Int, -arrsize[1] / 2):(floor(Int, arrsize[1] / 2) - 1)
+# Nset = ceil(Int, -arrsize[2] / 2):(floor(Int, arrsize[2] / 2) - 1)
 Rset = freqs_x_zoom[M_range]
 Sset = freqs_y_zoom[N_range]
 
